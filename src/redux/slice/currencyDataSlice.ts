@@ -1,6 +1,6 @@
 import {createAsyncThunk, createSlice, type PayloadAction} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
-import {getCurrencyByUserId} from '../../watermelondb/services';
+import {getCurrencyByUserId} from '../../cloud';
 import {selectUserId} from './userIdSlice';
 
 interface CurrencyState {

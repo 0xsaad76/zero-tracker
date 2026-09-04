@@ -5,11 +5,14 @@ export type TabParamList = {
   ReportsScreen: undefined;
   CategoryScreen: undefined;
   DebtsScreen: undefined;
+  InvestingScreen: undefined;
+  TradingScreen: undefined;
 };
 
 export type HomeStackParamList = {
   TabStack: NavigatorScreenParams<TabParamList>;
   SettingsScreen: undefined;
+  SpendingLimitsScreen: undefined;
   DiagnosticsScreen: undefined;
   AddTransactionsScreen: undefined;
   UpdateTransactionScreen: {

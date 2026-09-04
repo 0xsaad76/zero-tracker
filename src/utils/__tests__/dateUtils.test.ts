@@ -8,12 +8,7 @@
  * silently rendered empty.
  */
 
-import {
-  getMonthIndex,
-  getMonthNumber,
-  getMonthNames,
-  setDayjsLocale,
-} from '../dateUtils';
+import {getMonthIndex, getMonthNumber, getMonthNames, formatCalendar, setDayjsLocale} from '../dateUtils';
 
 describe('getMonthIndex', () => {
   it('resolves full English month names', () => {
@@ -33,6 +28,20 @@ describe('getMonthIndex', () => {
 
   it('returns -1 for a name that is not a month', () => {
     expect(getMonthIndex('Smarch')).toBe(-1);
+  });
+});
+
+describe('formatCalendar', () => {
+  beforeEach(() => {
+    setDayjsLocale('en');
+  });
+
+  it('includes both the relative weekday and full date for last-week spending groups', () => {
+    expect(formatCalendar('2026-09-07', '2026-09-10')).toBe('Last Monday 7th Sep 2026');
+  });
+
+  it('includes the weekday and date for older spending groups', () => {
+    expect(formatCalendar('2026-08-01', '2026-09-10')).toBe('Saturday 1st Aug 2026');
   });
 });
 

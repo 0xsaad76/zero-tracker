@@ -11,6 +11,9 @@
  *                 changes, only data-level color values).
  *   v4          — Added budgets table (DB schema v3). Exports now include
  *                 budget entries with amount, month, budgetType.
+ *   v5          — Budget entries may reference a category, and weekly limits
+ *                 are represented by budgetType + recurring-weekly period keys.
+ *                 Optional display preferences are included; account credentials are not.
  *
  * RULES:
  *   - Bump when the ExportData shape or data semantics change.
@@ -22,6 +25,7 @@
  *   Example: zero_v3_20260321163018.json
  *   The version in the filename matches the version inside the JSON.
  */
-export const CURRENT_EXPORT_VERSION = 4;
+// v6: investment portfolios, contributions/withdrawals, and monthly valuations.
+export const CURRENT_EXPORT_VERSION = 6;
 
 export type {ExportData, ExportEnvelope} from './validate';

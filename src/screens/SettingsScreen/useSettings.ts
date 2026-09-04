@@ -9,22 +9,17 @@ import {
   setCurrencyData,
 } from '../../redux/slice/currencyDataSlice';
 import {useCallback} from 'react';
-import {useFocusEffect} from '@react-navigation/native';
 import {getAppVersion} from '../../utils/getVersion';
-import {useTheme, ThemeMode} from '../../context/ThemeContext';
+import {useTheme} from '../../context/ThemeContext';
 import {useDialog} from '../../context/DialogContext';
-import {retryMigrations} from '../../backend';
-import StorageService from '../../utils/asyncStorageService';
-import {updateUserById, updateCurrencyById, deleteAllData} from '../../watermelondb/services';
-import {upsertBudget, deleteBudget} from '../../watermelondb/services/budgetService';
-import {Linking, Platform} from 'react-native';
-import {setIsOnboarded} from '../../redux/slice/isOnboardedSlice';
-import {fetchAllData, selectAllData} from '../../redux/slice/allDataSlice';
-import {fetchBudgetsByMonth, selectCurrentBudget} from '../../redux/slice/budgetDataSlice';
-import {selectMonthIndex, selectYear} from '../../redux/slice/monthSelectionSlice';
-import {getMonthNumber, getMonthNames} from '../../utils/dateUtils';
+import {updateUserById, updateCurrencyById, deleteAllData, getAllData} from '../../cloud';
+import {updateCloudPreferences} from '../../cloud/preferences';
+import {useCloudAuth} from '../../context/CloudAuthContext';
+import type {ExportData} from '../../backend/export/format';
+import {Linking} from 'react-native';
 import {useAppDispatch, useAppSelector} from '../../redux/hooks';
 import {appendErrorLog} from '../../utils/errorLog';
+import {requireCloudUser} from '../../cloud/records';
 
 /**
  * Result of an export attempt.
@@ -42,53 +37,63 @@ const useSettings = () => {
   const currencyCode = useAppSelector(selectCurrencyCode);
   const currencyName = useAppSelector(selectCurrencyName);
   const currencySymbol = useAppSelector(selectCurrencySymbol);
-  const allData = useAppSelector(selectAllData);
-
-  const selectedMonthIndex = useAppSelector(selectMonthIndex);
-  const selectedYear = useAppSelector(selectYear);
-  const MONTHS = getMonthNames();
-  const yearMonth = `${selectedYear}-${getMonthNumber(MONTHS[selectedMonthIndex])}`;
-  const currentBudget = useAppSelector(selectCurrentBudget);
-
-  const {colors, themeMode, setThemeMode} = useTheme();
+  const {colors, themeMode} = useTheme();
+  const {email, signOut, reload} = useCloudAuth();
   const {showDialog, showAlert} = useDialog();
   const appVersion = getAppVersion();
 
   const dispatch = useAppDispatch();
 
-  useFocusEffect(
-    useCallback(() => {
-      dispatch(fetchAllData());
-      dispatch(fetchBudgetsByMonth(yearMonth));
-    }, [dispatch, yearMonth]),
+  const handlePreferenceUpdate = useCallback(
+    async (patch: Partial<NonNullable<ExportData['preferences']>>): Promise<boolean> => {
+      try {
+        await updateCloudPreferences(patch);
+        return true;
+      } catch {
+        await showAlert({
+          type: 'error',
+          message: 'Could not save your preference to the cloud. Check your connection and try again.',
+        });
+        return false;
+      }
+    },
+    [showAlert],
   );
 
-  const handleThemeSelection = useCallback(async (theme: string) => {
-    try {
-      await setThemeMode(theme as ThemeMode);
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error saving theme preference:', error);
+  const handleThemeSelection = useCallback(
+    async (theme: string) => {
+      if (theme !== 'system' && theme !== 'light' && theme !== 'dark') {
+        await showAlert({type: 'error', message: 'Please select a valid theme.'});
+        return;
       }
-    }
-  }, [setThemeMode]);
+      await handlePreferenceUpdate({theme});
+    },
+    [handlePreferenceUpdate, showAlert],
+  );
 
-  const handleNameUpdate = useCallback(async (newName: string) => {
-    if (!userId) return;
-    try {
-      await updateUserById(userId, {username: newName});
-      dispatch(setUserName(newName));
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error updating the name:', error);
+  const handleNameUpdate = useCallback(
+    async (newName: string) => {
+      try {
+        if (!userId) throw new Error('Your account is not ready.');
+        await updateUserById(userId, {username: newName});
+        dispatch(setUserName(newName));
+      } catch (error) {
+        if (__DEV__) {
+          console.error('Error updating the name:', error);
+        }
+        await showAlert({
+          type: 'error',
+          message: 'Could not save your name to the cloud. Check your connection and try again.',
+        });
       }
-    }
-  }, [userId, dispatch]);
+    },
+    [userId, dispatch, showAlert],
+  );
 
   const handleCurrencyUpdate = useCallback(
     async (currency: {code: string; name: string; symbol: string}) => {
-      if (!currencyId) return;
       try {
+        if (!currencyId) throw new Error('Your currency is not ready.');
         await updateCurrencyById(currencyId, {
           name: currency.name,
           code: currency.code,
@@ -105,58 +110,14 @@ const useSettings = () => {
         if (__DEV__) {
           console.error('Error updating the currency:', error);
         }
+        await showAlert({
+          type: 'error',
+          message: 'Could not save your currency to the cloud. Check your connection and try again.',
+        });
       }
     },
-    [currencyId, dispatch],
+    [currencyId, dispatch, showAlert],
   );
-
-  const handleReportBug = useCallback(() => {
-    const bugSheetURL = 'https://docs.google.com/spreadsheets/d/187UDxJbFloEUkxxX29ZJnAI7HSdhAAdSbIcAByc8CDU/edit?usp=sharing';
-    Linking.openURL(bugSheetURL).catch(err => {
-      if (__DEV__) {
-        console.error('Error opening bug report sheet:', err);
-      }
-    });
-  }, []);
-
-  const handleRateNow = useCallback(() => {
-    const url = Platform.select({
-      ios: 'https://apps.apple.com/app/zero-offline-expense-tracker/id6759560225?action=write-review',
-      default: 'https://play.google.com/store/apps/details?id=com.anotherwhy.zero',
-    });
-    Linking.openURL(url).catch(err => {
-      if (__DEV__) {
-        console.error('Error opening store:', err);
-      }
-    });
-  }, []);
-
-  const handleGithub = useCallback(() => {
-    const githubRepoURL = 'https://github.com/indranilbhuin/zero';
-    Linking.openURL(githubRepoURL).catch(err => {
-      if (__DEV__) {
-        console.error('Error opening GitHub:', err);
-      }
-    });
-  }, []);
-
-  const handlePrivacyPolicy = useCallback(() => {
-    const privacyPolicyURL = 'https://lossless.dev/zero/privacy';
-    Linking.openURL(privacyPolicyURL).catch(err => {
-      if (__DEV__) {
-        console.error('Error opening Privacy Policy:', err);
-      }
-    });
-  }, []);
-
-  const handleTermsAndConditions = useCallback(() => {
-    const termsURL = 'https://lossless.dev/zero/terms';
-    Linking.openURL(termsURL).catch(err => {
-      if (__DEV__) {
-        console.error('Error opening Terms and Conditions:', err);
-      }
-    });
-  }, []);
 
   /**
    * Delete-everything flow, with the backup step treated as a real gate.
@@ -171,45 +132,74 @@ const useSettings = () => {
    * user can retry or explicitly choose Skip, which is a deliberate,
    * backup-free deletion rather than an accidental one.
    */
-  const handleDeleteAllData = useCallback(async (exportFn?: () => Promise<ExportOutcome>) => {
-    const wantsBackup = await showDialog({
-      type: 'info',
-      message: t('settings.deleteBackupPrompt'),
-      okLabel: t('settings.export'),
-      cancelLabel: t('common.skip'),
-    });
+  const handleDeleteAllData = useCallback(
+    async (exportFn?: () => Promise<ExportOutcome>) => {
+      const wantsBackup = await showDialog({
+        type: 'info',
+        message: t('settings.deleteBackupPrompt'),
+        okLabel: t('settings.export'),
+        cancelLabel: t('common.skip'),
+      });
 
-    if (wantsBackup && exportFn) {
-      const outcome = await exportFn();
-      if (outcome !== 'saved') {
-        // 'failed' has already surfaced its own error (or the storage-permission
-        // dialog); 'cancelled' means the user backed out of the share sheet.
-        // Either way there is no backup, so stop before the irreversible step.
+      if (wantsBackup) {
+        let outcome: ExportOutcome = 'failed';
+        try {
+          outcome = exportFn ? await exportFn() : 'failed';
+        } catch {
+          outcome = 'failed';
+        }
+        if (outcome !== 'saved') {
+          // 'failed' has already surfaced its own error (or the storage-permission
+          // dialog); 'cancelled' means the user backed out of the share sheet.
+          // Either way there is no backup, so stop before the irreversible step.
+          await showAlert({
+            type: 'error',
+            message: t('settings.deleteBackupFailed'),
+          });
+          return;
+        }
+      }
+
+      const confirmed = await showDialog({
+        type: 'warning',
+        message: `Permanently delete all expenses, categories, debtors, debts, spending limits, and currency records from the cloud for ${email || 'your signed-in Google account'}? This cannot be undone. Your Google account and sign-in will be retained.`,
+        okLabel: 'Delete',
+      });
+      if (!confirmed) return;
+
+      try {
+        requireCloudUser(userId);
+        await getAllData();
+        requireCloudUser(userId);
+        await deleteAllData();
+        reload();
+      } catch (error) {
+        // Never leave the user on a "deleted" screen with their data intact.
+        appendErrorLog(error instanceof Error ? error : new Error(String(error)), false);
         await showAlert({
           type: 'error',
-          message: t('settings.deleteBackupFailed'),
+          message:
+            'Could not complete cloud data deletion. Check your connection and reload your account before trying again.',
         });
         return;
       }
-    }
+    },
+    [email, userId, reload, showAlert, showDialog, t],
+  );
 
+  const handleSignOut = useCallback(async () => {
     const confirmed = await showDialog({
       type: 'warning',
-      message: t('settings.deleteConfirm'),
+      message: `Sign out of ${email || 'your Google account'} on this device? This clears the device session only. Your cloud records will not be deleted.`,
+      okLabel: 'Sign out',
     });
     if (!confirmed) return;
-
     try {
-      await deleteAllData();
-    } catch (error) {
-      // Never leave the user on a "deleted" screen with their data intact.
-      appendErrorLog(error instanceof Error ? error : new Error(String(error)), false);
-      await showAlert({type: 'error', message: t('settings.deleteFailed')});
-      return;
+      await signOut();
+    } catch {
+      await showAlert({type: 'error', message: 'Could not sign out. Please try again.'});
     }
-    StorageService.setItemSync('isOnboarded', JSON.stringify(false));
-    dispatch(setIsOnboarded(false));
-  }, [dispatch, showAlert, showDialog, t]);
+  }, [email, showDialog, showAlert, signOut]);
 
   const handleExportResult = useCallback(
     async (success: boolean) => {
@@ -228,17 +218,6 @@ const useSettings = () => {
     [showAlert, t],
   );
 
-  const handleRetryMigrations = useCallback(async (): Promise<boolean> => {
-    const succeeded = await retryMigrations();
-    await showAlert({
-      type: succeeded ? 'success' : 'error',
-      message: succeeded
-        ? t('settings.dataWarningRetrySucceeded')
-        : t('settings.dataWarningRetryFailed'),
-    });
-    return succeeded;
-  }, [showAlert, t]);
-
   const requestStorageViaDialog = useCallback(async () => {
     const confirmed = await showDialog({
       type: 'warning',
@@ -248,36 +227,6 @@ const useSettings = () => {
       Linking.openSettings();
     }
   }, [showDialog, t]);
-
-  const handleBudgetSave = useCallback(
-    async (amount: number, everyMonth: boolean) => {
-      if (!userId) {return;}
-      const month = everyMonth ? `recurring:${yearMonth}` : yearMonth;
-      try {
-        await upsertBudget(userId, amount, month);
-      } catch (error) {
-        // Was an unguarded await: a failed write rejected into the void, the
-        // sheet closed, and the budget simply was not there afterwards.
-        appendErrorLog(error instanceof Error ? error : new Error(String(error)), false);
-        await showAlert({type: 'error', message: t('settings.budgetSaveFailed')});
-        return;
-      }
-      dispatch(fetchBudgetsByMonth(yearMonth));
-    },
-    [userId, yearMonth, dispatch, showAlert, t],
-  );
-
-  const handleBudgetRemove = useCallback(async () => {
-    if (!currentBudget) {return;}
-    try {
-      await deleteBudget(currentBudget.id);
-    } catch (error) {
-      appendErrorLog(error instanceof Error ? error : new Error(String(error)), false);
-      await showAlert({type: 'error', message: t('settings.budgetSaveFailed')});
-      return;
-    }
-    dispatch(fetchBudgetsByMonth(yearMonth));
-  }, [currentBudget, yearMonth, dispatch, showAlert, t]);
 
   return {
     appVersion,
@@ -290,19 +239,11 @@ const useSettings = () => {
     currencySymbol,
     currencyCode,
     currencyName,
-    currentBudget,
-    budgetMonthLabel: `${MONTHS[selectedMonthIndex]} ${selectedYear}`,
-    handleBudgetSave,
-    handleBudgetRemove,
-    handleReportBug,
-    handleRateNow,
-    handleGithub,
-    handlePrivacyPolicy,
-    handleTermsAndConditions,
     handleDeleteAllData,
-    allData,
+    email,
+    handleSignOut,
+    handlePreferenceUpdate,
     handleExportResult,
-    handleRetryMigrations,
     showAlert,
     requestStorageViaDialog,
   };

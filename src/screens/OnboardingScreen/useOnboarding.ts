@@ -3,7 +3,8 @@ import useThemeColors from '../../hooks/useThemeColors';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {fetchUserData, selectUserId} from '../../redux/slice/userIdSlice';
 import {navigate} from '../../utils/navigationUtils';
-import {createCategory} from '../../watermelondb/services';
+import {createDefaultCategories} from '../../cloud';
+import {useDialog} from '../../context/DialogContext';
 interface CategorySelection {
   name: string;
   icon?: string;
@@ -12,6 +13,7 @@ interface CategorySelection {
 
 const useOnboarding = () => {
   const colors = useThemeColors();
+  const {showAlert} = useDialog();
   const [selectedCategories, setSelectedCategories] = useState<Array<CategorySelection>>([]);
 
   const selectedCategoryNames = useMemo(() => new Set(selectedCategories.map(c => c.name)), [selectedCategories]);
@@ -39,9 +41,7 @@ const useOnboarding = () => {
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
-      for (const category of selectedCategories) {
-        await createCategory(category.name, userId, category.icon ?? null, category.color ?? null);
-      }
+      await createDefaultCategories(userId, selectedCategories);
       navigate('ChooseCurrencyScreen');
     } catch (error) {
       if (__DEV__) {
@@ -49,8 +49,9 @@ const useOnboarding = () => {
       }
       isSubmittingRef.current = false;
       setIsSubmitting(false);
+      await showAlert({type: 'error', message: 'Categories could not be saved. Check your connection and try again.'});
     }
-  }, [selectedCategories, userId]);
+  }, [selectedCategories, userId, showAlert]);
 
   const toggleCategorySelection = useCallback(
     (category: CategorySelection) => {

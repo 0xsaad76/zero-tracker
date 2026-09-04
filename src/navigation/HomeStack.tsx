@@ -2,7 +2,7 @@ import React from 'react';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import HomeScreen from '../screens/HomeScreen';
 import {createBottomTabNavigator, type BottomTabBarButtonProps} from '@react-navigation/bottom-tabs';
-import {Platform, Pressable, Text, View} from 'react-native';
+import {Platform, Pressable, View} from 'react-native';
 import type {HomeStackParamList, TabParamList} from './types';
 import {useTranslation} from 'react-i18next';
 import Icon from '../components/atoms/Icons';
@@ -24,6 +24,9 @@ import UpdateDebtScreen from '../screens/UpdateDebtScreen';
 import EverydayTransactionScreen from '../screens/EverydayTransactionScreen';
 import CategoryTransactionScreen from '../screens/CategoryTransactionScreen';
 import UpdateDebtorScreen from '../screens/UpdateDebtorScreen';
+import InvestingScreen from '../screens/InvestingScreen';
+import TradingScreen from '../screens/TradingScreen';
+import SpendingLimitsScreen from '../screens/SpendingLimitsScreen';
 import {gs} from '../styles/globalStyles';
 
 const screenOptions = {
@@ -32,52 +35,34 @@ const screenOptions = {
 
 const ICON_SIZE = 24;
 
+const TabIcon = ({color, icon}: {color: string; icon: string}) => (
+  <View style={[gs.h26, gs.center]}>
+    <Icon name={icon} size={ICON_SIZE} color={color} />
+  </View>
+);
+
 const HomeIcon = ({color}: {color: string}) => {
-  const {t} = useTranslation();
-  return (
-    <View style={[gs.center, gs.minW70]}>
-      <View style={[gs.h26, gs.center]}>
-        <Icon name="home" size={ICON_SIZE} color={color} />
-      </View>
-      <Text style={[gs.text10, gs.fontMedium, gs.noFontPadding, gs.textCenter, gs.mt2, {color}]}>{t('tabs.home')}</Text>
-    </View>
-  );
+  return <TabIcon color={color} icon="home" />;
 };
 
 const ReportsIcon = ({color}: {color: string}) => {
-  const {t} = useTranslation();
-  return (
-    <View style={[gs.center, gs.minW70]}>
-      <View style={[gs.h26, gs.center]}>
-        <Icon name="bar-chart-3" size={ICON_SIZE} color={color} />
-      </View>
-      <Text style={[gs.text10, gs.fontMedium, gs.noFontPadding, gs.textCenter, gs.mt2, {color}]}>{t('tabs.reports')}</Text>
-    </View>
-  );
+  return <TabIcon color={color} icon="bar-chart-3" />;
 };
 
 const DebtIcon = ({color}: {color: string}) => {
-  const {t} = useTranslation();
-  return (
-    <View style={[gs.center, gs.minW70]}>
-      <View style={[gs.h26, gs.center]}>
-        <Icon name="credit-card" size={ICON_SIZE} color={color} />
-      </View>
-      <Text style={[gs.text10, gs.fontMedium, gs.noFontPadding, gs.textCenter, gs.mt2, {color}]}>{t('tabs.debts')}</Text>
-    </View>
-  );
+  return <TabIcon color={color} icon="credit-card" />;
 };
 
 const CategoriesIcon = ({color}: {color: string}) => {
-  const {t} = useTranslation();
-  return (
-    <View style={[gs.center, gs.minW70]}>
-      <View style={[gs.h26, gs.center]}>
-        <Icon name="shapes" size={ICON_SIZE} color={color} />
-      </View>
-      <Text style={[gs.text10, gs.fontMedium, gs.noFontPadding, gs.textCenter, gs.mt2, {color}]}>{t('tabs.categories')}</Text>
-    </View>
-  );
+  return <TabIcon color={color} icon="shapes" />;
+};
+
+const InvestingIcon = ({color}: {color: string}) => {
+  return <TabIcon color={color} icon="piggy-bank" />;
+};
+
+const TradingIcon = ({color}: {color: string}) => {
+  return <TabIcon color={color} icon="trending-up" />;
 };
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -90,6 +75,7 @@ const TabBarButton = ({ref: _ref, ...props}: BottomTabBarButtonProps) => (
 );
 
 const TabStack = () => {
+  const {t} = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
 
@@ -109,22 +95,43 @@ const TabStack = () => {
         headerShown: false,
         tabBarActiveTintColor: colors.accentGreen,
         tabBarInactiveTintColor: colors.primaryText,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        tabBarLabelPosition: 'below-icon',
+        tabBarLabelStyle: [gs.text9, gs.fontMedium, gs.noFontPadding],
         tabBarStyle: tabBarStyle,
+        tabBarItemStyle: {minWidth: 0},
         tabBarButton: TabBarButton,
       }}>
-      <Tab.Screen name="HomeScreen" component={HomeScreen} options={{headerShown: false, tabBarIcon: HomeIcon}} />
+      <Tab.Screen
+        name="HomeScreen"
+        component={HomeScreen}
+        options={{tabBarLabel: t('tabs.home'), tabBarIcon: HomeIcon}}
+      />
       <Tab.Screen
         name="ReportsScreen"
         component={ReportsScreen}
-        options={{headerShown: false, tabBarIcon: ReportsIcon}}
+        options={{tabBarLabel: t('tabs.reports'), tabBarIcon: ReportsIcon}}
       />
       <Tab.Screen
         name="CategoryScreen"
         component={CategoryScreen}
-        options={{headerShown: false, tabBarIcon: CategoriesIcon}}
+        options={{tabBarLabel: t('tabs.categories'), tabBarIcon: CategoriesIcon}}
       />
-      <Tab.Screen name="DebtsScreen" component={DebtsScreen} options={{headerShown: false, tabBarIcon: DebtIcon}} />
+      <Tab.Screen
+        name="DebtsScreen"
+        component={DebtsScreen}
+        options={{tabBarLabel: t('tabs.debts'), tabBarIcon: DebtIcon}}
+      />
+      <Tab.Screen
+        name="InvestingScreen"
+        component={InvestingScreen}
+        options={{tabBarLabel: t('tabs.investing'), tabBarIcon: InvestingIcon}}
+      />
+      <Tab.Screen
+        name="TradingScreen"
+        component={TradingScreen}
+        options={{tabBarLabel: t('tabs.trading'), tabBarIcon: TradingIcon}}
+      />
     </Tab.Navigator>
   );
 };
@@ -134,6 +141,7 @@ const HomeStack = () => {
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="TabStack" component={TabStack} />
       <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
+      <Stack.Screen name="SpendingLimitsScreen" component={SpendingLimitsScreen} />
       <Stack.Screen name="AddTransactionsScreen" component={AddTransactionsScreen} />
       <Stack.Screen name="UpdateTransactionScreen" component={UpdateTransactionScreen} />
       <Stack.Screen name="AddCategoryScreen" component={AddCategoryScreen} />

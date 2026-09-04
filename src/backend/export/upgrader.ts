@@ -39,6 +39,16 @@ export const upgradeExportData = (raw: RawExport): ExportData => {
     version = 4;
   }
 
+  if (version < 5) {
+    data = upgradeV4toV5(data);
+    version = 5;
+  }
+
+  if (version < 6) {
+    // An absent investment section leaves an existing portfolio untouched on import.
+    version = 6;
+  }
+
   if (__DEV__ && version < CURRENT_EXPORT_VERSION) {
     console.warn(`Export format v${version} is behind current v${CURRENT_EXPORT_VERSION}`);
   }
@@ -75,7 +85,9 @@ const upgradeV0toV1 = (data: ExportData): ExportData => sanitizeEntities(data);
 const upgradeV1toV2 = (data: ExportData): ExportData => sanitizeEntities(data);
 
 const remapColor = (color: string | undefined): string | undefined => {
-  if (!color) {return color;}
+  if (!color) {
+    return color;
+  }
   return COLOR_REMAP[color.toUpperCase()] ?? color;
 };
 
@@ -102,4 +114,14 @@ const upgradeV2toV3 = (data: ExportData): ExportData => ({
 const upgradeV3toV4 = (data: ExportData): ExportData => ({
   ...data,
   budgets: data.budgets ?? [],
+});
+
+/**
+ * v4 → v5: The existing budget representation remains valid. v5 adds optional
+ * category references and weekly period keys, so old overall-monthly rows need
+ * no destructive transformation.
+ */
+const upgradeV4toV5 = (data: ExportData): ExportData => ({
+  ...data,
+  budgets: data.budgets.map(budget => ({...budget})),
 });

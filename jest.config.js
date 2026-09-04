@@ -17,6 +17,7 @@ module.exports = {
       '@react-native|' +
       '@react-native-community|' +
       'react-native|' +
+      'react-native-url-polyfill|' +
       '@react-navigation|' +
       '@nozbe/watermelondb|' +
       'react-native-actions-sheet|' +

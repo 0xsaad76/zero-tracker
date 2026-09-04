@@ -9,7 +9,7 @@ import useReports from './useReports';
 import PrimaryView from '../../components/atoms/PrimaryView';
 import PrimaryText from '../../components/atoms/PrimaryText';
 import PieChartLabels from '../../components/atoms/PieChartLabels';
-import {ExpenseData as Expense} from '../../watermelondb/services';
+import {ExpenseData as Expense} from '../../cloud';
 import EmptyState from '../../components/atoms/EmptyState';
 import useFormatAmount from '../../hooks/useFormatAmount';
 import {SheetManager} from 'react-native-actions-sheet';

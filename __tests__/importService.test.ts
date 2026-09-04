@@ -18,6 +18,10 @@
 import type {Database} from '@nozbe/watermelondb';
 import type {User, Category, Expense, Currency, Debtor, Debt, Budget} from '../src/watermelondb/models';
 import type {ExportData} from '../src/backend/export/format';
+import {upsertBudget, getBudgetsByMonth} from '../src/watermelondb/services/budgetService';
+import {getAllData} from '../src/watermelondb/services/getService';
+import {getAllExpensesByDateRange} from '../src/watermelondb/services/expenseService';
+import {getBackupPreferences} from '../src/utils/backupPreferences';
 
 jest.mock('../src/watermelondb/database', () => {
   const {Database: Db} = require('@nozbe/watermelondb');
@@ -51,10 +55,10 @@ jest.mock('../src/watermelondb/database', () => {
   return {database: db, getDatabase: () => db, getDatabaseError: () => null, default: db};
 });
 
- 
 const {database} = require('../src/watermelondb/database') as {database: Database};
- 
-const {importAllData} = require('../src/watermelondb/services/importService') as typeof import('../src/watermelondb/services/importService');
+
+const {importAllData} =
+  require('../src/watermelondb/services/importService') as typeof import('../src/watermelondb/services/importService');
 
 const backup = (overrides: Partial<ExportData> = {}): ExportData => ({
   users: [{username: 'Ada', email: ''}],
@@ -74,7 +78,10 @@ const backup = (overrides: Partial<ExportData> = {}): ExportData => ({
   currencies: [{code: 'INR', symbol: '₹', name: 'Indian Rupee'}],
   debtors: [{title: 'Sam', debtorStatus: true, icon: 'user', type: 'Friend', color: '#444444'}],
   debts: [{amount: 500, description: 'lunch', debtor: {title: 'Sam'}, date: '2026-08-03', type: 'Lend'}],
-  budgets: [{amount: 30000, month: 'recurring:2026-08', budgetType: 'monthly'}],
+  budgets: [
+    {amount: 30000, month: 'recurring:2026-08', budgetType: 'monthly'},
+    {amount: 5000, month: 'recurring-weekly:2026-07-27', budgetType: 'weekly', category: {name: 'Fuel'}},
+  ],
   ...overrides,
 });
 
@@ -95,6 +102,62 @@ beforeEach(async () => {
 });
 
 describe('importAllData', () => {
+  it('round-trips weekly/category limits and display preferences', async () => {
+    const preferences = {theme: 'dark', locale: 'en', weekStart: 'monday', showBudgetProgress: false} as const;
+    await importAllData(backup({preferences}));
+    const exported = await getAllData();
+    expect(exported?.budgets).toEqual(backup().budgets);
+    expect(exported?.preferences).toEqual(preferences);
+    expect(getBackupPreferences()).toEqual(preferences);
+    await importAllData(exported!);
+    expect((await getAllData())?.budgets).toEqual(exported?.budgets);
+  });
+
+  it('keeps overall, category, weekly and monthly limits independent', async () => {
+    const {userId} = await importAllData(backup());
+    const categories = await database.get<Category>('categories').query().fetch();
+    const fuelId = categories.find(c => c.name === 'Fuel')!.id;
+    await upsertBudget(userId, 900, 'recurring:2026-08', 'monthly', fuelId);
+    await upsertBudget(userId, 100, 'recurring-weekly:2026-08-02', 'weekly');
+    await upsertBudget(userId, 200, 'recurring-weekly:2026-08-09', 'weekly');
+    const budgets = await getBudgetsByMonth(userId, '2026-08');
+    expect(budgets).toHaveLength(4);
+    expect(budgets.find(b => b.budgetType === 'monthly' && !b.categoryId)?.amount).toBe(30000);
+    expect(budgets.find(b => b.budgetType === 'monthly' && b.categoryId === fuelId)?.amount).toBe(900);
+    expect(budgets.find(b => b.budgetType === 'weekly' && b.categoryId === fuelId)?.amount).toBe(5000);
+    expect(budgets.find(b => b.budgetType === 'weekly' && !b.categoryId)).toMatchObject({
+      amount: 200,
+      month: 'recurring-weekly:2026-08-02',
+    });
+  });
+
+  it('switches a monthly override to recurring without a stale override winning', async () => {
+    const {userId} = await importAllData(backup());
+    await upsertBudget(userId, 700, '2026-09');
+    await upsertBudget(userId, 900, 'recurring:2026-09');
+    const budgets = (await getBudgetsByMonth(userId, '2026-09')).filter(b => b.budgetType === 'monthly');
+    expect(budgets).toHaveLength(1);
+    expect(budgets[0]).toMatchObject({amount: 900, month: 'recurring:2026-08'});
+  });
+
+  it('loads a cross-month week inclusively through the final millisecond', async () => {
+    const dates = ['2026-08-29T23:59:59', '2026-08-30', '2026-09-05T23:59:59.999', '2026-09-06'];
+    const {userId} = await importAllData(
+      backup({expenses: dates.map(date => ({title: date, amount: 1, date, category: {name: 'Fuel'}}))}),
+    );
+    const expenses = await getAllExpensesByDateRange(userId, '2026-08-30', '2026-09-05');
+    expect(expenses.map(e => e.date).sort()).toEqual(dates.slice(1, 3));
+  });
+
+  it('rejects invalid limits without altering existing records', async () => {
+    const {userId} = await importAllData(backup());
+    for (const amount of [0, -1, Infinity, NaN]) {
+      await expect(upsertBudget(userId, amount, '2026-09')).rejects.toThrow();
+    }
+    await expect(upsertBudget(userId, 1, '2026-13')).rejects.toThrow();
+    expect((await countAll()).budgets).toBe(2);
+  });
+
   it('restores every entity type, including budgets', async () => {
     const {stats} = await importAllData(backup());
     const counts = await countAll();
@@ -104,12 +167,18 @@ describe('importAllData', () => {
     expect(counts.debtors).toBe(1);
     expect(counts.debts).toBe(1);
     // Budgets were the entity the old import silently dropped entirely.
-    expect(counts.budgets).toBe(1);
-    expect(stats.budgets).toBe(1);
+    expect(counts.budgets).toBe(2);
+    expect(stats.budgets).toBe(2);
 
-    const budget = (await database.get<Budget>('budgets').query().fetch())[0];
-    expect(budget.amount).toBe(30000);
-    expect(budget.month).toBe('recurring:2026-08');
+    const budgets = await database.get<Budget>('budgets').query().fetch();
+    const overall = budgets.find(b => b.budgetType === 'monthly');
+    const fuelWeekly = budgets.find(b => b.budgetType === 'weekly');
+    const categories = await database.get<Category>('categories').query().fetch();
+    const fuel = categories.find(c => c.name === 'Fuel');
+    expect(overall?.amount).toBe(30000);
+    expect(overall?.month).toBe('recurring:2026-08');
+    expect(fuelWeekly?.amount).toBe(5000);
+    expect(fuelWeekly?.categoryId).toBe(fuel?.id);
   });
 
   it('preserves soft-delete status instead of resurrecting everything', async () => {
@@ -183,9 +252,7 @@ describe('importAllData', () => {
     await importAllData(
       backup({
         users: [{username: 'Grace', email: ''}],
-        expenses: [
-          {title: 'Only one', amount: 1, description: '', category: {name: 'Fuel'}, date: '2026-08-09'},
-        ],
+        expenses: [{title: 'Only one', amount: 1, description: '', category: {name: 'Fuel'}, date: '2026-08-09'}],
       }),
     );
 
@@ -209,15 +276,13 @@ describe('importAllData', () => {
     // atomic, this is exactly the point where the device would be left with
     // its old data destroyed and the new data half-written.
     const budgets = database.get<Budget>('budgets');
-    const spy = jest
-      .spyOn(budgets, 'prepareCreate')
-      .mockImplementation(() => {
-        throw new Error('simulated failure mid-import');
-      });
+    const spy = jest.spyOn(budgets, 'prepareCreate').mockImplementation(() => {
+      throw new Error('simulated failure mid-import');
+    });
 
-    await expect(
-      importAllData(backup({users: [{username: 'Grace', email: ''}]})),
-    ).rejects.toThrow('simulated failure mid-import');
+    await expect(importAllData(backup({users: [{username: 'Grace', email: ''}]}))).rejects.toThrow(
+      'simulated failure mid-import',
+    );
 
     spy.mockRestore();
 

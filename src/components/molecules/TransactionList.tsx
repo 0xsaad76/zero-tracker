@@ -7,15 +7,22 @@ import type {SwipeableMethods} from 'react-native-gesture-handler/ReanimatedSwip
 import Icon from '../atoms/Icons';
 import {formatDate, formatCalendar} from '../../utils/dateUtils';
 import {navigate} from '../../utils/navigationUtils';
-import {deleteExpenseById, ExpenseData as ExpenseDocType} from '../../watermelondb/services';
+import {deleteExpenseById, ExpenseData as ExpenseDocType} from '../../cloud';
 import {useAppDispatch} from '../../redux/hooks';
-import {fetchExpenses, fetchExpensesByMonth, invalidateExpenseCache, fetchEverydayExpenses} from '../../redux/slice/expenseDataSlice';
+import {
+  fetchExpenses,
+  fetchExpensesByMonth,
+  invalidateExpenseCache,
+  fetchEverydayExpenses,
+} from '../../redux/slice/expenseDataSlice';
 import PrimaryText from '../atoms/PrimaryText';
 import SwipeableRow from '../atoms/SwipeableRow';
 import useFormatAmount from '../../hooks/useFormatAmount';
 import {FlashList, useRecyclingState} from '@shopify/flash-list';
 import type {AppDispatch} from '../../redux/store';
 import {gs} from '../../styles/globalStyles';
+import {requireCloudUser} from '../../cloud/records';
+import {useDialog} from '../../context/DialogContext';
 
 interface CategoryInfo {
   id?: string;
@@ -109,7 +116,9 @@ const ExpenseRow: React.FC<ExpenseRowProps> = React.memo(
                 />
               </View>
               <View style={[gs.flex1, gs.gap2]}>
-                <PrimaryText weight="medium" numberOfLines={1}>{expense.title}</PrimaryText>
+                <PrimaryText weight="medium" numberOfLines={1}>
+                  {expense.title}
+                </PrimaryText>
                 <PrimaryText size={11} color={colors.secondaryText} numberOfLines={1}>
                   {expense.category?.name}
                   {expense.description ? ` · ${expense.description}` : ''}
@@ -164,9 +173,30 @@ const InlineUndo: React.FC<{
 });
 
 const TransactionItem: React.FC<TransactionItemProps> = React.memo(
-  ({expense: initialExpense, colors, dispatch, label, targetDate, targetMonth, openSwipeableRef, edgeToEdge, tutorialSwipeRef, isFirstGroup}) => {
+  ({
+    expense: initialExpense,
+    colors,
+    dispatch,
+    label,
+    targetDate,
+    targetMonth,
+    openSwipeableRef,
+    edgeToEdge,
+    tutorialSwipeRef,
+    isFirstGroup,
+  }) => {
     const deletionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const pendingDeleteRef = useRef<string | null>(null);
+    const pendingDeleteRef = useRef<Expense | null>(null);
+    const {showAlert} = useDialog();
+    const mountedRef = useRef(true);
+    const currentGroup = useRef(label);
+    currentGroup.current = label;
+    useEffect(() => {
+      mountedRef.current = true;
+      return () => {
+        mountedRef.current = false;
+      };
+    }, []);
     // Indirection so the recycle callback below can flush without touching
     // consts that may still be in their temporal dead zone on first render.
     const flushRef = useRef<() => void>(() => {});
@@ -193,10 +223,11 @@ const TransactionItem: React.FC<TransactionItemProps> = React.memo(
     }, []);
 
     const commitDelete = useCallback(
-      async (expenseId: string) => {
-        pendingDeleteRef.current = null;
+      async (record: Expense) => {
         try {
-          await deleteExpenseById(expenseId);
+          requireCloudUser(record.userId);
+          await deleteExpenseById(record.id);
+          requireCloudUser(record.userId);
           dispatch(invalidateExpenseCache());
           if (targetMonth) {
             dispatch(fetchExpensesByMonth(targetMonth));
@@ -210,9 +241,23 @@ const TransactionItem: React.FC<TransactionItemProps> = React.memo(
           if (__DEV__) {
             console.error('Error deleting expense:', error);
           }
+          try {
+            requireCloudUser(record.userId);
+          } catch {
+            return;
+          }
+          if (mountedRef.current && currentGroup.current === label) {
+            setExpenses(current => (current.some(r => r.id === record.id) ? current : [...current, record]));
+            setDeletedItemId(null);
+          }
+          dispatch(invalidateExpenseCache());
+          await showAlert({
+            type: 'error',
+            message: 'Could not confirm cloud deletion. Check your connection and refresh before trying again.',
+          });
         }
       },
-      [dispatch, targetDate, targetMonth],
+      [dispatch, targetDate, targetMonth, label, setExpenses, setDeletedItemId, showAlert],
     );
 
     const flushPendingDelete = useCallback(() => {
@@ -220,6 +265,7 @@ const TransactionItem: React.FC<TransactionItemProps> = React.memo(
       if (!pendingId) {
         return;
       }
+      pendingDeleteRef.current = null;
       if (deletionTimeoutRef.current) {
         clearTimeout(deletionTimeoutRef.current);
         deletionTimeoutRef.current = null;
@@ -239,23 +285,26 @@ const TransactionItem: React.FC<TransactionItemProps> = React.memo(
     const handleDelete = useCallback(
       (expenseId: string) => {
         const deletedExpense = expenses.find(expense => String(expense.id) === expenseId) ?? null;
+        if (!deletedExpense) return;
+        flushPendingDelete();
         deletedItemRef.current = deletedExpense;
         setDeletedItemId(expenseId);
 
         if (deletionTimeoutRef.current) {
           clearTimeout(deletionTimeoutRef.current);
         }
-        pendingDeleteRef.current = expenseId;
+        pendingDeleteRef.current = deletedExpense;
 
         deletionTimeoutRef.current = setTimeout(() => {
           deletionTimeoutRef.current = null;
+          pendingDeleteRef.current = null;
           setExpenses(prev => prev.filter(e => String(e.id) !== expenseId));
           setDeletedItemId(null);
           deletedItemRef.current = null;
-          void commitDelete(expenseId);
+          void commitDelete(deletedExpense);
         }, 3000);
       },
-      [expenses, setExpenses, setDeletedItemId, commitDelete],
+      [expenses, setExpenses, setDeletedItemId, commitDelete, flushPendingDelete],
     );
 
     const handleUndo = useCallback(() => {
@@ -271,10 +320,7 @@ const TransactionItem: React.FC<TransactionItemProps> = React.memo(
     // The row awaiting undo is still in `expenses`, but it must not count
     // toward the day's total while it is shown as deleted.
     const dayTotal = useMemo(
-      () =>
-        expenses
-          .filter(e => String(e.id) !== deletedItemId)
-          .reduce((sum, e) => sum + e.amount, 0),
+      () => expenses.filter(e => String(e.id) !== deletedItemId).reduce((sum, e) => sum + e.amount, 0),
       [expenses, deletedItemId],
     );
 
@@ -341,9 +387,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
     return sortedDates.map(date => ({
       date,
-      expenses: (groupedExpenses.get(date) ?? []).sort((a, b) =>
-        b.date.localeCompare(a.date),
-      ),
+      expenses: (groupedExpenses.get(date) ?? []).sort((a, b) => b.date.localeCompare(a.date)),
       label: formatCalendar(date),
     }));
   }, [allExpenses]);
@@ -367,10 +411,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   );
 
   const refreshControl = useMemo(
-    () =>
-      onRefresh ? (
-        <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} />
-      ) : undefined,
+    () => (onRefresh ? <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} /> : undefined),
     [refreshing, onRefresh],
   );
 

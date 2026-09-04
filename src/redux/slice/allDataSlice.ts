@@ -1,6 +1,6 @@
 import {createAsyncThunk, createSlice} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
-import {ExportData, getAllData} from '../../watermelondb/services';
+import {ExportData, getAllData} from '../../cloud';
 
 interface AllDataState {
   data: ExportData | null;

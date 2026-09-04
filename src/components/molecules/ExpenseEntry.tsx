@@ -1,5 +1,5 @@
 import {ScrollView, View} from 'react-native';
-import React, {useCallback, useEffect, useMemo, useState, memo} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState, memo} from 'react';
 import type {RouteProp} from '@react-navigation/native';
 import {useTranslation} from 'react-i18next';
 import type {HomeStackParamList} from '../../navigation/types';
@@ -15,7 +15,12 @@ import useFormatAmount from '../../hooks/useFormatAmount';
 import {goBack, navigate} from '../../utils/navigationUtils';
 import {selectUserId} from '../../redux/slice/userIdSlice';
 import {fetchCategories, selectActiveCategories} from '../../redux/slice/categoryDataSlice';
-import {createExpense, updateExpenseById, getAllExpensesByMonth, type CategoryData as CategoryDocType} from '../../watermelondb/services';
+import {
+  createExpense,
+  updateExpenseById,
+  getAllExpensesByMonth,
+  type CategoryData as CategoryDocType,
+} from '../../cloud';
 import {fetchExpensesByMonth, invalidateExpenseCache} from '../../redux/slice/expenseDataSlice';
 import {fetchBudgetsByMonth, selectCurrentBudget} from '../../redux/slice/budgetDataSlice';
 import DatePicker from '../atoms/DatePicker';
@@ -26,6 +31,8 @@ import {expenseAmountSchema, expenseDescriptionSchema, expenseSchema} from '../.
 import {useAppDispatch, useAppSelector} from '../../redux/hooks';
 import {gs} from '../../styles/globalStyles';
 import AmountInput from '../atoms/AmountInput';
+import {useDialog} from '../../context/DialogContext';
+import {requireCloudUser} from '../../cloud/records';
 
 interface ExpenseEntryProps {
   type: string;
@@ -34,6 +41,35 @@ interface ExpenseEntryProps {
 
 const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
   const {t} = useTranslation();
+  const {showAlert} = useDialog();
+  const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const showSaveFailure = useCallback(
+    async (capturedUserId: string) => {
+      if (!mountedRef.current) {
+        return;
+      }
+      try {
+        requireCloudUser(capturedUserId);
+      } catch {
+        return;
+      }
+      await showAlert({
+        type: 'error',
+        message: 'Could not save your expense. Check your connection and try again.',
+      });
+    },
+    [showAlert],
+  );
   const expenseData = route?.params;
   const isAddButton = type === 'Add';
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -41,13 +77,17 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
   const [selectedCategories, setSelectedCategories] = useState<CategoryDocType[]>(
     isAddButton
       ? []
-      : categories?.filter((category: CategoryDocType) => category?.name === expenseData?.category?.name) ?? [],
+      : (categories?.filter((category: CategoryDocType) => category?.name === expenseData?.category?.name) ?? []),
   );
 
-  const [createdAt, setCreatedAt] = useState(isAddButton ? getISODateTime() : expenseData?.expenseDate ?? getISODateTime());
+  const [createdAt, setCreatedAt] = useState(
+    isAddButton ? getISODateTime() : (expenseData?.expenseDate ?? getISODateTime()),
+  );
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [expenseTitle, setExpenseTitle] = useState(isAddButton ? '' : expenseData?.expenseTitle ?? '');
-  const [expenseDescription, setExpenseDescription] = useState(isAddButton ? '' : expenseData?.expenseDescription ?? '');
+  const [expenseTitle, setExpenseTitle] = useState(isAddButton ? '' : (expenseData?.expenseTitle ?? ''));
+  const [expenseDescription, setExpenseDescription] = useState(
+    isAddButton ? '' : (expenseData?.expenseDescription ?? ''),
+  );
   const [expenseAmount, setExpenseAmount] = useState(isAddButton ? '' : String(expenseData?.expenseAmount ?? ''));
 
   const expenseAmountError = hasInteracted
@@ -86,9 +126,7 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
       if (current.length > 0) {
         return current;
       }
-      const match = categories?.filter(
-        (category: CategoryDocType) => category?.name === editingCategoryName,
-      );
+      const match = categories?.filter((category: CategoryDocType) => category?.name === editingCategoryName);
       return match?.length ? match : current;
     });
   }, [isAddButton, editingCategoryName, categories]);
@@ -121,11 +159,15 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
           console.error('Error loading month spend:', error);
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [userId, expenseYearMonth, expenseDateStr]);
 
   const dailyBudgetInfo = useMemo(() => {
-    if (!currentBudget) {return null;}
+    if (!currentBudget) {
+      return null;
+    }
 
     const dayOfMonth = Number.parseInt(expenseDateStr.slice(8, 10), 10) || 1;
     const daysInMonthCount = getDaysInMonthByYearMonth(expenseYearMonth);
@@ -152,7 +194,16 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
     const dailyRemaining = allowance - otherSpendToday - enteredAmount;
 
     return {dailyBudget: allowance, dailyRemaining, exceeded: dailyRemaining < 0};
-  }, [currentBudget, expenseYearMonth, expenseDateStr, monthSpend, expenseAmount, isAddButton, expenseData?.expenseAmount, expenseData?.expenseDate]);
+  }, [
+    currentBudget,
+    expenseYearMonth,
+    expenseDateStr,
+    monthSpend,
+    expenseAmount,
+    isAddButton,
+    expenseData?.expenseAmount,
+    expenseData?.expenseDate,
+  ]);
 
   const handleAddCategory = useCallback(() => {
     navigate('AddCategoryScreen');
@@ -165,32 +216,77 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
   }, []);
 
   const handleAddExpense = useCallback(async () => {
-    if (!isValid || selectedCategories.length === 0) {
+    if (savingRef.current || !mountedRef.current || !isValid || selectedCategories.length === 0) {
       return;
     }
+    savingRef.current = true;
+    setIsSaving(true);
+    const capturedUserId = userId;
     const categoryId = selectedCategories[0].id;
     try {
-      await createExpense(userId, expenseTitle, Number(expenseAmount), expenseDescription, categoryId, createdAt);
+      requireCloudUser(capturedUserId);
+      await createExpense(
+        capturedUserId,
+        expenseTitle,
+        Number(expenseAmount),
+        expenseDescription,
+        categoryId,
+        createdAt,
+      );
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
 
       const yearMonth = formatDate(createdAt, 'YYYY-MM');
       const year = Number.parseInt(formatDate(createdAt, 'YYYY'), 10);
       ensureYearInCache(userId, year);
       dispatch(invalidateExpenseCache());
       await dispatch(fetchExpensesByMonth(yearMonth));
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
       goBack();
     } catch (error) {
       if (__DEV__) {
         console.error('Error creating expense:', error);
       }
+      await showSaveFailure(capturedUserId);
+    } finally {
+      savingRef.current = false;
+      if (mountedRef.current) {
+        setIsSaving(false);
+      }
     }
-  }, [isValid, selectedCategories, userId, expenseTitle, expenseAmount, expenseDescription, createdAt, dispatch]);
+  }, [
+    isValid,
+    selectedCategories,
+    userId,
+    expenseTitle,
+    expenseAmount,
+    expenseDescription,
+    createdAt,
+    dispatch,
+    showSaveFailure,
+  ]);
 
   const handleUpdateExpense = useCallback(async () => {
-    if (!isValid || selectedCategories.length === 0 || !expenseData?.expenseId) {
+    if (
+      savingRef.current ||
+      !mountedRef.current ||
+      !isValid ||
+      selectedCategories.length === 0 ||
+      !expenseData?.expenseId
+    ) {
       return;
     }
+    savingRef.current = true;
+    setIsSaving(true);
+    const capturedUserId = userId;
     const categoryId = selectedCategories[0].id;
     try {
+      requireCloudUser(capturedUserId);
       await updateExpenseById(
         expenseData.expenseId,
         categoryId,
@@ -199,16 +295,30 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
         expenseDescription,
         createdAt,
       );
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
 
       const yearMonth = formatDate(createdAt, 'YYYY-MM');
       const year = Number.parseInt(formatDate(createdAt, 'YYYY'), 10);
       ensureYearInCache(userId, year);
       dispatch(invalidateExpenseCache());
       await dispatch(fetchExpensesByMonth(yearMonth));
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
       goBack();
     } catch (error) {
       if (__DEV__) {
         console.error('Error updating expense:', error);
+      }
+      await showSaveFailure(capturedUserId);
+    } finally {
+      savingRef.current = false;
+      if (mountedRef.current) {
+        setIsSaving(false);
       }
     }
   }, [
@@ -221,20 +331,23 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
     createdAt,
     dispatch,
     userId,
+    showSaveFailure,
   ]);
 
   const toggleCategorySelection = useCallback((category: CategoryDocType) => {
     // Compare by id, not object identity: fetchCategories() replaces the array
     // with fresh objects, and reference equality would then fail to deselect.
-    setSelectedCategories(current =>
-      current.some(selected => selected.id === category.id) ? [] : [category],
-    );
+    setSelectedCategories(current => (current.some(selected => selected.id === category.id) ? [] : [category]));
   }, []);
 
   return (
     <PrimaryView colors={colors}>
       <View style={[gs.mb20, gs.mt20]}>
-        <AppHeader onPress={() => goBack()} colors={colors} text={isAddButton ? t('transaction.addTitle') : t('transaction.editTitle')} />
+        <AppHeader
+          onPress={() => goBack()}
+          colors={colors}
+          text={isAddButton ? t('transaction.addTitle') : t('transaction.editTitle')}
+        />
       </View>
 
       <CustomInput
@@ -254,7 +367,9 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
         schema={expenseDescriptionSchema}
       />
 
-      <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>{t('transaction.amountLabel')}</PrimaryText>
+      <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>
+        {t('transaction.amountLabel')}
+      </PrimaryText>
       <AmountInput
         value={expenseAmount}
         onChangeText={setExpenseAmount}
@@ -275,21 +390,21 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
 
       {dailyBudgetInfo ? (
         <View style={[gs.rowCenter, gs.gap6, gs.mb10]}>
-          <Icon
-            name="target"
-            size={13}
-            color={dailyBudgetInfo.exceeded ? colors.accentOrange : colors.accentGreen}
-          />
+          <Icon name="target" size={13} color={dailyBudgetInfo.exceeded ? colors.accentOrange : colors.accentGreen} />
           <PrimaryText size={11} variant="number" color={colors.secondaryText}>
             {t('transaction.dailyBudget', {amount: formatAmount(Math.round(dailyBudgetInfo.dailyBudget))})}
           </PrimaryText>
-          <PrimaryText size={11} color={colors.secondaryText}>·</PrimaryText>
+          <PrimaryText size={11} color={colors.secondaryText}>
+            ·
+          </PrimaryText>
           <PrimaryText
             size={11}
             variant="number"
             color={dailyBudgetInfo.exceeded ? colors.accentOrange : colors.accentGreen}>
             {dailyBudgetInfo.exceeded
-              ? t('transaction.dailyExceeded', {amount: formatAmount(Math.round(Math.abs(dailyBudgetInfo.dailyRemaining)))})
+              ? t('transaction.dailyExceeded', {
+                  amount: formatAmount(Math.round(Math.abs(dailyBudgetInfo.dailyRemaining))),
+                })
               : t('transaction.dailyRemaining', {amount: formatAmount(Math.round(dailyBudgetInfo.dailyRemaining))})}
           </PrimaryText>
         </View>
@@ -303,7 +418,9 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
         label={t('transaction.dateLabel')}
       />
 
-      <PrimaryText size={12} color={colors.secondaryText} style={gs.mb8}>{t('transaction.categoryLabel')}</PrimaryText>
+      <PrimaryText size={12} color={colors.secondaryText} style={gs.mb8}>
+        {t('transaction.categoryLabel')}
+      </PrimaryText>
       {/* keyboardShouldPersistTaps + keyboardDismissMode replace the
           screen-wide TouchableWithoutFeedback: they dismiss the keyboard
           without taking the touch responder away from this ScrollView. */}
@@ -331,7 +448,8 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
           onPress={isAddButton ? handleAddExpense : handleUpdateExpense}
           colors={colors}
           buttonTitle={isAddButton ? t('common.add') : t('common.update')}
-          disabled={!isValid || selectedCategories.length === 0}
+          disabled={isSaving || !isValid || selectedCategories.length === 0}
+          loading={isSaving}
         />
       </View>
     </PrimaryView>

@@ -2,6 +2,7 @@ import StorageService from './asyncStorageService';
 
 const ERROR_LOG_KEY = 'error_log';
 const MAX_ENTRIES = 20;
+let sessionEntries: ErrorLogEntry[] = [];
 
 interface ErrorLogEntry {
   timestamp: string;
@@ -19,39 +20,18 @@ export const appendErrorLog = (error: Error, fatal: boolean = false): void => {
       fatal,
     };
 
-    const raw = StorageService.getItemSync(ERROR_LOG_KEY);
-    let entries: ErrorLogEntry[] = [];
-    if (raw) {
-      try {
-        entries = JSON.parse(raw);
-      } catch {
-        entries = [];
-      }
-    }
-
-    entries.push(entry);
-    if (entries.length > MAX_ENTRIES) {
-      entries = entries.slice(-MAX_ENTRIES);
-    }
-
-    StorageService.setItemSync(ERROR_LOG_KEY, JSON.stringify(entries));
+    // Error text can contain record identifiers. Keep diagnostics in RAM only.
+    sessionEntries = [...sessionEntries, entry].slice(-MAX_ENTRIES);
   } catch {
     // Storage itself failed — nothing we can do
   }
 };
 
 export const getErrorLog = (): ErrorLogEntry[] => {
-  try {
-    const raw = StorageService.getItemSync(ERROR_LOG_KEY);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch {
-    // Corrupted log
-  }
-  return [];
+  return [...sessionEntries];
 };
 
 export const clearErrorLog = (): void => {
+  sessionEntries = [];
   StorageService.removeItemSync(ERROR_LOG_KEY);
 };

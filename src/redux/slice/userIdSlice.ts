@@ -1,6 +1,6 @@
 import {createAsyncThunk, createSlice} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
-import {getAllUsers} from '../../watermelondb/services';
+import {getAllUsers} from '../../cloud';
 
 interface UserState {
   userId: string;

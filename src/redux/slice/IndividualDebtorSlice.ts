@@ -1,6 +1,6 @@
 import {createAsyncThunk, createSlice} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
-import {DebtorData as DebtorDocType, getDebtorByDebtorId} from '../../watermelondb/services';
+import {DebtorData as DebtorDocType, getDebtorByDebtorId} from '../../cloud';
 
 interface IndividualDebtorState {
   individualDebtorData: DebtorDocType | null;

@@ -88,8 +88,10 @@ declare module 'react-native-actions-sheet' {
         currencyCode?: string;
         isRecurring?: boolean;
         monthLabel?: string;
-        onSave?: (amount: number, everyMonth: boolean) => void;
-        onRemove?: () => void;
+        scopeLabel?: string;
+        period?: 'monthly' | 'weekly';
+        onSave?: (amount: number, everyMonth: boolean) => void | Promise<void>;
+        onRemove?: () => void | Promise<void>;
       };
     }>;
   }

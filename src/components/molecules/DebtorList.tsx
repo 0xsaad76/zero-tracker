@@ -3,7 +3,7 @@ import React, {useCallback, useMemo, memo} from 'react';
 import {useTranslation} from 'react-i18next';
 import Icon from '../atoms/Icons';
 import {navigate} from '../../utils/navigationUtils';
-import {DebtorData as Debtor, DebtData as DebtDocType} from '../../watermelondb/services';
+import {DebtorData as Debtor, DebtData as DebtDocType} from '../../cloud';
 import PrimaryText from '../atoms/PrimaryText';
 import {Colors} from '../../hooks/useThemeColors';
 import useFormatAmount from '../../hooks/useFormatAmount';

@@ -78,7 +78,7 @@ describe('upgradeExportData', () => {
 
     const result = upgradeExportData({
       key: 'test-key',
-      version: CURRENT_EXPORT_VERSION,
+      version: 4,
       data: data as any,
     });
 

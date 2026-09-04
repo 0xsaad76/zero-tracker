@@ -12,7 +12,7 @@ import SwipeTutorialTooltip from '../../components/atoms/SwipeTutorialTooltip';
 import PrimaryView from '../../components/atoms/PrimaryView';
 import PrimaryText from '../../components/atoms/PrimaryText';
 import SwipeableRow from '../../components/atoms/SwipeableRow';
-import {CategoryData as Category} from '../../watermelondb/services';
+import {CategoryData as Category} from '../../cloud';
 import EmptyState from '../../components/atoms/EmptyState';
 import {Colors} from '../../hooks/useThemeColors';
 import {FlashList} from '@shopify/flash-list';

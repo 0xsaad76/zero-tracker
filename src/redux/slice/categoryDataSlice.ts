@@ -1,6 +1,6 @@
 import {createAsyncThunk, createEntityAdapter, createSelector, createSlice} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
-import {CategoryData as Category, getAllCategoriesByUserId} from '../../watermelondb/services';
+import {CategoryData as Category, getAllCategoriesByUserId} from '../../cloud';
 import {selectUserId} from './userIdSlice';
 
 const categoriesAdapter = createEntityAdapter<Category>();

@@ -2,7 +2,7 @@ import {formatDate} from '../../utils/dateUtils';
 import useThemeColors from '../../hooks/useThemeColors';
 import {useAppDispatch, useAppSelector} from '../../redux/hooks';
 import {RouteProp, useFocusEffect} from '@react-navigation/native';
-import {ExpenseData as Expense} from '../../watermelondb/services';
+import {ExpenseData as Expense} from '../../cloud';
 import {useCallback, useMemo} from 'react';
 import {fetchEverydayExpenses, selectFilterKey, selectFilteredExpenses} from '../../redux/slice/expenseDataSlice';
 export type EverydayTransactionRouteProp = RouteProp<

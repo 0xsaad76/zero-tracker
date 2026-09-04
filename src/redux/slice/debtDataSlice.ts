@@ -1,6 +1,6 @@
 import {createAsyncThunk, createEntityAdapter, createSlice} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
-import {DebtData as Debt, getAllDebtsByUserIdAndDebtorId, getAllDebtsByUserId} from '../../watermelondb/services';
+import {DebtData as Debt, getAllDebtsByUserIdAndDebtorId, getAllDebtsByUserId} from '../../cloud';
 import {selectUserId} from './userIdSlice';
 
 const debtsAdapter = createEntityAdapter<Debt>();

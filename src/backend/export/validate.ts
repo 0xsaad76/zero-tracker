@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {investmentBackupSchema} from '../../investments/model';
 
 const userSchema = z.object({
   username: z.string(),
@@ -46,7 +47,7 @@ const budgetSchema = z.object({
   amount: z.number(),
   month: z.string(),
   budgetType: z.string(),
-  category: z.object({name: z.string()}).optional(),  // legacy field, ignored on import
+  category: z.object({name: z.string()}).optional(),
 });
 
 const exportDataSchema = z.object({
@@ -57,6 +58,15 @@ const exportDataSchema = z.object({
   debtors: z.array(debtorSchema),
   debts: z.array(debtSchema),
   budgets: z.array(budgetSchema).default([]),
+  investments: z.array(investmentBackupSchema).optional(),
+  preferences: z
+    .object({
+      theme: z.enum(['system', 'light', 'dark']),
+      locale: z.string().nullable(),
+      weekStart: z.enum(['sunday', 'monday']),
+      showBudgetProgress: z.boolean(),
+    })
+    .optional(),
 });
 
 const exportEnvelopeSchema = z.object({

@@ -2,7 +2,7 @@ import {RefreshControlProps, View} from 'react-native';
 import React, {useCallback, useMemo, useRef, memo} from 'react';
 import {useTranslation} from 'react-i18next';
 import type {SwipeableMethods} from 'react-native-gesture-handler/ReanimatedSwipeable';
-import {DebtData as Debt} from '../../watermelondb/services';
+import {DebtData as Debt} from '../../cloud';
 import PrimaryText from '../atoms/PrimaryText';
 import SwipeableRow from '../atoms/SwipeableRow';
 import {formatDate, formatCalendar} from '../../utils/dateUtils';

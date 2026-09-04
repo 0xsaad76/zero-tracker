@@ -1,91 +1,77 @@
-# Release QA checklist
+# Android verification checklist
 
-Run this before every release, against the **actual release artifact** (`.aab` /
-`.ipa`), on **real hardware**. Debug builds and simulators hide production-only
-failures: Hermes behaviour, `console.*` suppression, storage permissions,
-low-memory kills, and R8/ProGuard differences.
+This fork is for private Android use. No iOS or app-store release is currently planned. Do not treat unit tests or a JavaScript bundle as an Android-device sign-off.
 
-Zero ships no crash reporter and no analytics by design — the only signals that
-a build is sound are the automated gate below and this manual pass.
-
-## 1. Automated gate (must be green before building)
+## Automated checks
 
 ```bash
-bun run typecheck    # tsc --strict
-bun run lint         # eslint (flat config, ESLint 9)
-bun run test         # jest — full suite incl. App render smoke test
-bun test             # bun — pure suites, fast second opinion
-cd android && ./gradlew assembleDebug
+npx tsc --noEmit
+npx eslint . --quiet
+npm test -- --runInBand
+npm run test:cloud-db
+bun test
+cd android && ./gradlew assembleDebug --console=plain
 ```
 
-## 2. Build the real artifact
+## Authentication and privacy
 
-- [ ] `bun run version:set` — versionName and versionCode both bumped
-- [ ] `cd android && ./gradlew bundleRelease`
-- [ ] iOS: `bundle exec pod install` then Archive from Xcode
-- [ ] Install the release build on device (not Metro, not debug)
+- [x] Register package `com.anotherwhy.zero` and the APK signing SHA-1 in a Google Android OAuth client.
+- [ ] Fresh install displays Google login, not financial screens.
+- [ ] Google login/cancel/error, then successful retry.
+- [ ] Cold start restores the securely stored session and fetches the same account.
+- [ ] Switching accounts never shows old transactions, budgets, names, or debts.
+- [ ] Sign-out during a request cannot deliver old data to the next account.
+- [ ] New installations contain no financial SQLite/MMKV records or persistent diagnostics.
+- [ ] Only explicit exports write financial files to device storage.
+- [ ] Settings About contains only Version; no Drive controls remain.
 
-## 3. Privacy verification (Lossless Protocol claims)
+## Persistence and recovery
 
-- [ ] `aapt dump permissions <release apk>` → **no `android.permission.INTERNET`**;
-      storage permissions capped at `maxSdkVersion="32"`
-- [ ] Play Console pre-launch report shows no network access
-- [ ] Settings → "What leaves this device" renders and reads correctly
-- [ ] `grep -rn "fetch(\|XMLHttpRequest\|WebSocket" src/` returns nothing
+- [ ] Add/edit/delete expense, category, debtor, debt, weekly and monthly limits.
+- [ ] Save buttons resist rapid double taps and show a failure when offline.
+- [ ] On an ambiguous timeout, reload before retrying an addition.
+- [ ] Uninstall/reinstall, Google sign-in: recover previously confirmed cloud records.
+- [ ] Airplane mode at cold launch: retry screen, not an empty account or false success.
+- [ ] Two devices make concurrent edits without silently overwriting unrelated records.
+- [ ] Old SQLite installation requires explicit destination-account confirmation.
+- [ ] Failed migration upload/verification preserves SQLite; retry does not duplicate records.
+- [ ] A different-currency migration is blocked without deleting the device copy.
+- [ ] JSON import/export round trip preserves budgets, relationships, and soft deletes.
+- [ ] Cancel cloud-replace/delete confirmation: no data changes.
+- [ ] Delete-with-export failure aborts deletion. Confirmed deletion affects only the signed-in account.
+- [ ] Delayed transaction delete/undo, recycling, and logout remain account-bound; failed delete is recoverable on refresh.
 
-## 4. Critical flows (both platforms)
+## Existing product features
 
-- [ ] Fresh install → onboarding → name → categories → currency → first expense
-- [ ] Add / edit / delete an expense; confirm the daily-budget line is right
-      **when editing** (it must not double-count the amount being edited)
-- [ ] Delete a transaction and let the 3s undo window elapse → stays deleted
-- [ ] Delete a transaction, then **scroll the row off-screen** within 3s →
-      the delete still commits and the row does not come back
-- [ ] Delete a transaction, then **background/kill the app** within 3s →
-      no resurrection
-- [ ] Category create / edit / soft-delete (with confirmation)
-- [ ] Verify a soft-deleted category still resolves on old transactions
-- [ ] Debtor + debts: create, edit, settle, delete debtor (deletes their debts)
-- [ ] Reports: donut renders, centre total matches the legend sum, tapping a
-      legend row opens that category
-- [ ] Reports: empty month, single-category month, many-category month
-- [ ] Month navigation across a year boundary; no flicker
+- [ ] Overall and category monthly/weekly progress totals are accurate.
+- [ ] A week crossing month/year boundaries includes all its spending.
+- [ ] Sunday/Monday week-start choice is respected.
+- [ ] Home progress visibility, theme, and locale reload from the cloud account.
+- [ ] Spending group labels show weekday and date.
+- [ ] Investing and Trading tabs remain placeholders.
+- [ ] Reports, backdated entries, large fonts, and accessibility labels are usable.
 
-## 5. Backup / restore
+## Current evidence and remaining gate
 
-- [ ] Export → wipe → restore: expenses, categories, debts, **budgets**, and
-      soft-delete statuses all return
-- [ ] Restore a backup with duplicate category names → merged, not duplicated
-- [ ] Cancel the "replace all data" dialog → existing data untouched
-- [ ] Restore on **Android 10, 11 or 12** specifically (storage permission path)
-- [ ] After restore, the month/year picker shows the restored data's years
+September 4, 2026: TypeScript and ESLint checks passed; Jest passed 264 tests
+across 23 suites; Bun's overlapping pure-logic subset passed 217 tests. The
+database harness passed owner isolation, anonymous denial, conflict detection,
+atomic rollback, deletion scope, and restoration beyond 1,000 records. A
+production-mode Android JavaScript bundle with assets built successfully.
 
-## 6. Locale, theme, accessibility
-
-- [ ] Switch theme (light / dark / system) — including a system-level change
-      while the app is open
-- [ ] Switch language, then re-open the month picker: month names update and
-      previously-saved months still resolve (no empty month)
-- [ ] Non-Latin name in onboarding (e.g. `हिंदी`, `José`) is accepted
-- [ ] Currency formatting: an INR device shows lakh grouping for INR but
-      **not** for USD/RUB/HUF
-- [ ] Screen reader: swipe actions announce Edit/Delete; the budget
-      "every month" row announces as a switch with its state
-- [ ] Large system font / display size does not clip the home header or sheets
-
-## 7. Edge and adversarial
-
-- [ ] Airplane mode throughout (the app must not care)
-- [ ] Denied storage permission → clear message, offer to open settings
-- [ ] Force-kill mid-write (add an expense and kill immediately) → no corruption
-- [ ] Very long titles, very large amounts, rapid double-taps on Continue
-      during onboarding (must not create duplicate categories/currencies)
-- [ ] Low storage
-- [ ] Cold start time and list scroll feel unchanged vs the previous release
-- [ ] Settings → Diagnostics lists recorded errors and clears them
-
-## 8. Sign-off
-
-- [ ] Automated gate green
-- [ ] Sections 3–7 walked on at least one recent iPhone and one mid/low-end Android
-- [ ] Note the OS versions and devices used in the release notes
+See [cloud storage notes](supabase-storage.md) for automated and live database checks.
+The SDK license blocker was resolved with the owner's authorization on September
+4, 2026. The exact pinned NDK, SDK Platform 36, Build Tools 36.0.0, and CMake
+3.30.5 are installed; Gradle also installed dependency-required Build Tools
+35.0.0 and CMake 3.22.1. After retrying a temporary DNS failure, the x86_64
+debug build succeeded (607 tasks) and installed on the Pixel 7a API 36 emulator.
+The APK's debug signing SHA-1 matches the OAuth setup notes. This verifies the
+native build and installation, not Google authentication or financial flows.
+Those still require signed-in device QA.
+The emulator was updated to stable 37.1.11; hardware OpenGL with Vulkan disabled,
+cold boot, two cores, and disabled simulated cameras restored responsiveness
+confirmed by the owner. Android Settings navigation succeeded. The working
+profile is saved locally and in the `android:emulator` launcher; shell syntax,
+dry-run flags, and duplicate-instance detection were checked. No emulator user
+data was wiped. This does not substitute for the signed-in app checks above.
+See [live preview instructions](ANDROID_PREVIEW.md).

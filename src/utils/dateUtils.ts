@@ -56,8 +56,18 @@ const DAYJS_LOCALES: Record<string, () => void> = {
  * language — the localized array alone cannot do that.
  */
 const MONTHS_EN = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 // Cached locale data — recomputed by setDayjsLocale(), never per call.
@@ -110,14 +120,7 @@ const initDayjsLocale = () => {
 initDayjsLocale();
 
 export type DateInput = string | number | Date | Dayjs | null | undefined;
-export type DateUnit =
-  | 'day'
-  | 'week'
-  | 'month'
-  | 'year'
-  | 'hour'
-  | 'minute'
-  | 'second';
+export type DateUnit = 'day' | 'week' | 'month' | 'year' | 'hour' | 'minute' | 'second';
 
 export const parseDate = (date?: DateInput): Dayjs => {
   return date ? dayjs(date) : dayjs();
@@ -125,10 +128,7 @@ export const parseDate = (date?: DateInput): Dayjs => {
 
 export const now = (): Dayjs => dayjs();
 
-export const formatDate = (
-  date?: DateInput,
-  format: string = 'YYYY-MM-DD',
-): string => {
+export const formatDate = (date?: DateInput, format: string = 'YYYY-MM-DD'): string => {
   return parseDate(date).format(format);
 };
 
@@ -138,11 +138,9 @@ export const getCurrentMonthName = (): string => dayjs().format('MMMM');
 
 export const getYear = (date: DateInput): number => parseDate(date).year();
 
-export const getMonthName = (date: DateInput): string =>
-  parseDate(date).format('MMMM');
+export const getMonthName = (date: DateInput): string => parseDate(date).format('MMMM');
 
-export const getDayOfMonth = (date: DateInput): number =>
-  parseDate(date).date();
+export const getDayOfMonth = (date: DateInput): number => parseDate(date).date();
 
 export const getDayOfWeek = (date: DateInput): number => parseDate(date).day();
 
@@ -198,48 +196,32 @@ export const getMonthNumber = (monthName: string): string => {
   return String(index + 1).padStart(2, '0');
 };
 
-export const isSameDate = (
-  date1: DateInput,
-  date2: DateInput,
-  unit: DateUnit = 'day',
-): boolean => {
+export const isSameDate = (date1: DateInput, date2: DateInput, unit: DateUnit = 'day'): boolean => {
   return parseDate(date1).isSame(parseDate(date2), unit);
 };
 
-export const diffDates = (
-  date1: DateInput,
-  date2: DateInput,
-  unit: DateUnit = 'day',
-): number => {
+export const diffDates = (date1: DateInput, date2: DateInput, unit: DateUnit = 'day'): number => {
   return parseDate(date1).diff(parseDate(date2), unit);
 };
 
-export const subtractFromDate = (
-  date: DateInput,
-  amount: number,
-  unit: DateUnit,
-): Dayjs => {
+export const subtractFromDate = (date: DateInput, amount: number, unit: DateUnit): Dayjs => {
   return parseDate(date).subtract(amount, unit);
 };
 
-export const addToDate = (
-  date: DateInput,
-  amount: number,
-  unit: DateUnit,
-): Dayjs => {
+export const addToDate = (date: DateInput, amount: number, unit: DateUnit): Dayjs => {
   return parseDate(date).add(amount, unit);
 };
 
 export const getYesterday = (): Dayjs => dayjs().subtract(1, 'day');
 
-export const formatCalendar = (date: DateInput): string => {
-  return parseDate(date).calendar(null, {
-    sameDay: '[' + i18n.t('calendar.today') + ']',
-    nextDay: '[' + i18n.t('calendar.tomorrow') + ']',
-    nextWeek: 'dddd',
-    lastDay: '[' + i18n.t('calendar.yesterday') + ']',
-    lastWeek: i18n.t('calendar.lastWeek'),
-    sameElse: 'Do MMM YYYY',
+export const formatCalendar = (date: DateInput, relativeTo?: DateInput): string => {
+  return parseDate(date).calendar(relativeTo ? parseDate(relativeTo) : null, {
+    sameDay: '[' + i18n.t('calendar.today') + '] dddd Do MMM YYYY',
+    nextDay: '[' + i18n.t('calendar.tomorrow') + '] dddd Do MMM YYYY',
+    nextWeek: 'dddd Do MMM YYYY',
+    lastDay: '[' + i18n.t('calendar.yesterday') + '] dddd Do MMM YYYY',
+    lastWeek: i18n.t('calendar.lastWeek') + ' Do MMM YYYY',
+    sameElse: 'dddd Do MMM YYYY',
   });
 };
 
@@ -256,9 +238,7 @@ export const getISODateTime = (): string => {
   return dayjs().format('YYYY-MM-DDTHH:mm:ss');
 };
 
-export const sortByDateDesc = <T extends {date: DateInput}>(
-  items: T[],
-): T[] => {
+export const sortByDateDesc = <T extends {date: DateInput}>(items: T[]): T[] => {
   return [...items].sort((a, b) => diffDates(b.date, a.date));
 };
 

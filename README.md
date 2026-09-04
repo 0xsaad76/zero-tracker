@@ -1,159 +1,53 @@
-<div align="center">
-    &nbsp;&nbsp;&nbsp;
-    <img src="assets/icons/adaptive-icon-light.png" height="300" alt="zero logo light">
-    <h1 align="center">zero - Minimal Expense Manager</h1>
-</div>
+# Zero — Android expense tracker
 
-Zero is a lightweight, open-source expense tracking app for Android & iOS. Built with privacy-first approach — all your financial data stays on your device. No servers, no tracking, no data collection.
-
-## Screenshots
-
-<div style="display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center;">
-   <img src="assets/screenshots/zero_home_screen_dark.png" width="200"/>
-   <img src="assets/screenshots/zero_home_screen_light.png" width="200"/>
-   <img src="assets/screenshots/zero_report_screen_dark.png" width="200"/>
-   <img src="assets/screenshots/zero_report_screen_light.png" width="200"/>
-   <img src="assets/screenshots/zero_debts_screen_dark.png" width="200"/>
-   <img src="assets/screenshots/zero_debts_screen_light.png" width="200"/>
-   <img src="assets/screenshots/zero_settings_screen_dark.png" width="200"/>
-   <img src="assets/screenshots/zero_settings_screen_light.png" width="200"/>
-   <img src="assets/screenshots/zero_categories_screen_dark.png" width="200"/>
-   <img src="assets/screenshots/zero_categories_screen_light.png" width="200"/>
-</div>
-
-## What's New in v2.0
-
-- **WatermelonDB + SQLite** — Migrated from Realm to WatermelonDB for better performance and long-term support
-- **Faster load times** — Lazy loading and optimized queries
-- **Improved UI** — Bottom sheets, better animations, refined design
-- **Better data export** — Export/import your data seamlessly across devices
+This private-use Android fork of Zero uses Google sign-in and Supabase for financial records. Internet is required; signing into the same Google account after reinstalling retrieves its cloud data. No app-store deployment is planned.
 
 ## Features
 
-### Expense Tracking
-Add, edit, and delete transactions with customizable categories.
+- Expenses, custom categories, monthly reports, and debts.
+- Overall and category-level weekly/monthly spending limits.
+- Home budget progress with optional thin category bars and a Settings visibility toggle.
+- Spending headers with weekday and date.
+- Investing and Trading placeholder tabs for later development.
+- Automatic cloud writes after each successful save; no separate backup button.
+- Explicit JSON restore/export and CSV export.
+- Light, dark, and system themes; locale and currency preferences.
+- Settings About contains only the app version.
 
-### Category Management
-Create your own categories with custom icons and colors.
+## Stack
 
-### Insights & Reports
-- Monthly spending breakdown with pie charts
-- Heatmap calendar showing daily expenses
-- Average per day calculations
+React Native 0.86.2, React 19.2.8, TypeScript 5, React Navigation 7, Redux Toolkit (RAM-only), Supabase Auth/Postgres JSONB, Zod, MMKV display preferences, and native Keychain session storage. WatermelonDB/SQLite remains only for migrating old installations and compatibility tests.
 
-### Debt Tracking
-Track money you owe or are owed. Manage debtors and individual debts.
+## Development
 
-### Customization
-- Light & Dark themes (+ system default)
-- Multiple currency symbols
-- Personalized username
-
-### Data Control
-- Export all data as JSON
-- Import on new device
-- Delete all data option
-
-### Privacy First
-- 100% offline — no internet required
-- All data stored locally on device
-- Zero data collection
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Framework | React Native 0.84 |
-| Language | TypeScript 5.8 (strict) |
-| Database | WatermelonDB (SQLite + JSI) |
-| State | Redux Toolkit + Redux Persist |
-| Validation | Zod 4 |
-| UI | Custom atomic components + Lucide icons |
-| Navigation | React Navigation 7 |
-| Lists | FlashList (performant lists) |
-| Storage | MMKV (preferences & persistence) |
-
-### Why WatermelonDB?
-
-We migrated from Realm to WatermelonDB because:
-- **Realm is deprecated** — MongoDB announced end of support
-- **SQLite is battle-tested** — Powers millions of apps
-- **Lazy loading** — Only loads data when needed
-- **Better React Native integration** — Built specifically for RN
-- **Smaller bundle size** — Less bloat
-
-## Project Structure
-
-```
-src/
-├── components/        # Reusable UI components (atomic design)
-│   ├── atoms/         # Basic components (Button, Input, Text, ErrorBoundary)
-│   └── molecules/     # Composite components
-├── screens/           # App screens
-│   └── ScreenName/
-│       ├── index.tsx          # UI component
-│       └── useScreenName.ts   # Business logic hook
-├── watermelondb/      # Database layer
-│   ├── models/        # WatermelonDB model classes
-│   ├── services/      # CRUD operations
-│   ├── schema.ts      # Database schema
-│   ├── migrations.ts  # Schema migrations
-│   └── database.ts    # DB initialization (lazy Proxy)
-├── backend/           # Startup & data logic
-│   ├── export/        # Export format, upgrader, validation
-│   └── migrations/    # Sequential data migrations
-├── redux/             # Redux Toolkit slices & store
-├── navigation/        # React Navigation config
-├── context/           # React Context providers (Theme, Dialog)
-├── hooks/             # Global hooks
-├── styles/            # Global styles (utility-first)
-├── utils/             # Helper functions
-└── sheets/            # Bottom sheet components
-```
-
-## Getting Started
-
-### Prerequisites
-- Node.js >= 22.11.0
-- Bun (package manager)
-- Android Studio / Xcode
-
-### Installation
+Use Node 22.13+ and Bun 1.3.14 (or `npx --yes bun@1.3.14`). Install the Android SDK and the NDK version declared in Gradle with their required licenses accepted.
 
 ```bash
-# Clone the repo
-git clone https://github.com/indranilbhuin/zero.git
-cd zero
-
-# Install dependencies
 bun install
-
-# iOS only
-cd ios && bundle exec pod install && cd ..
-
-# Run the app
-bun run android  # or bun run ios
-
-# Type-check
 bun run typecheck
+bun run test --runInBand
+bun run test:cloud-db
+bun run android
 ```
 
-## Contributing
+For live preview, follow [Android emulator / phone steps](docs/ANDROID_PREVIEW.md). Expo Go is not compatible with this project's native modules.
 
-Contributions are welcome! Please read our [Code of Conduct](CODE_OF_CONDUCT.md) first.
+See [cloud configuration and migration](docs/supabase-storage.md) for OAuth setup, privacy boundaries, concurrency, rollback, and current device-testing limitations. Public client identifiers live in `src/config/supabase.ts`; secrets must never go in the app.
 
-## Legal
+New installations never write financial records to SQLite. Existing installations explicitly confirm the account for a verified migration before the old device copy is removed. Google session credentials and display preferences are the only automatically persisted device state. Manual exports are user-requested local files.
 
-- [Privacy Policy](PRIVACY_POLICY.md) — We collect zero data
-- [Terms of Service](TERMS_OF_SERVICE.md) — Usage terms
+Cloud persistence is not a backup against intentional deletion: deleting cloud records is permanent. Export JSON before destructive changes if you need a separate recoverable copy.
+
+## Main code areas
+
+- `src/cloud/`: cloud transactions, domain services, JSON transfer, legacy migration.
+- `src/context/CloudAuthContext.tsx`: login, session lifecycle, migration gate.
+- `supabase/migrations/`: deployed SQL schema and owner-only security rules.
+- `src/screens/`, `src/components/`, `src/sheets/`: application UI.
+- `src/redux/`: session-only state.
+- `src/backend/`: versioned export/import validation and legacy migrations.
+- `src/watermelondb/`: legacy SQLite compatibility, not the current data source.
 
 ## License
 
-This project is licensed under the [BSD 2-Clause License](LICENSE).
-
----
-
-<div align="center">
-  <p>Built with ❤️ in India</p>
-  <p><i>Embrace the simplicity of zero</i></p>
-</div>
+The upstream [BSD 2-Clause license](LICENSE) and attribution are retained. SDK and dependency licenses remain separate.

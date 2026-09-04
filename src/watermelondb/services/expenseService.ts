@@ -2,6 +2,7 @@ import {Q} from '@nozbe/watermelondb';
 import {database} from '../database';
 import Expense from '../models/Expense';
 import Category from '../models/Category';
+import {formatDate, parseDate} from '../../utils/dateUtils';
 
 // Type for expense data
 export interface ExpenseData {
@@ -35,22 +36,13 @@ const buildCategoryMap = async (userId: string): Promise<Map<string, CategoryInf
   // Intentionally queries ALL categories (no category_status filter) so that
   // expenses under soft-deleted categories still resolve their name/icon/color.
   // Do NOT add a status filter here — it would break historical categorization.
-  const categories = await database
-    .get<Category>('categories')
-    .query(Q.where('user_id', userId))
-    .fetch();
+  const categories = await database.get<Category>('categories').query(Q.where('user_id', userId)).fetch();
   return new Map(
-    categories.map(cat => [
-      cat.id,
-      {id: cat.id, name: cat.name, icon: cat.icon ?? '', color: cat.color ?? '#808080'},
-    ]),
+    categories.map(cat => [cat.id, {id: cat.id, name: cat.name, icon: cat.icon ?? '', color: cat.color ?? '#808080'}]),
   );
 };
 
-const mapExpenseWithCategory = (
-  e: Expense,
-  categoryMap: Map<string, CategoryInfo>,
-): ExpenseWithCategory => ({
+const mapExpenseWithCategory = (e: Expense, categoryMap: Map<string, CategoryInfo>): ExpenseWithCategory => ({
   id: e.id,
   title: e.title,
   amount: e.amount,
@@ -145,26 +137,16 @@ export const deleteExpenseById = async (expenseId: string): Promise<void> => {
 /**
  * Gets all expenses by user ID
  */
-export const getAllExpensesByUserId = async (
-  userId: string,
-): Promise<ExpenseData[]> => {
-  const expenses = await database
-    .get<Expense>('expenses')
-    .query(Q.where('user_id', userId))
-    .fetch();
+export const getAllExpensesByUserId = async (userId: string): Promise<ExpenseData[]> => {
+  const expenses = await database.get<Expense>('expenses').query(Q.where('user_id', userId)).fetch();
   return expenses.map(mapExpenseToData);
 };
 
 /**
  * Gets all expenses by user ID with category data populated
  */
-export const getAllExpensesByUserIdWithCategory = async (
-  userId: string,
-): Promise<ExpenseWithCategory[]> => {
-  const expenses = await database
-    .get<Expense>('expenses')
-    .query(Q.where('user_id', userId))
-    .fetch();
+export const getAllExpensesByUserIdWithCategory = async (userId: string): Promise<ExpenseWithCategory[]> => {
+  const expenses = await database.get<Expense>('expenses').query(Q.where('user_id', userId)).fetch();
 
   const categoryMap = await buildCategoryMap(userId);
   return expenses.map(e => mapExpenseWithCategory(e, categoryMap));
@@ -173,15 +155,28 @@ export const getAllExpensesByUserIdWithCategory = async (
 /**
  * Gets all expenses by user ID and date with category data
  */
-export const getAllExpensesByDate = async (
+export const getAllExpensesByDate = async (userId: string, targetDate: string): Promise<ExpenseWithCategory[]> => {
+  const expenses = await database
+    .get<Expense>('expenses')
+    .query(Q.where('user_id', userId), Q.where('date', Q.like(`${Q.sanitizeLikeString(targetDate)}%`)))
+    .fetch();
+
+  const categoryMap = await buildCategoryMap(userId);
+  return expenses.map(e => mapExpenseWithCategory(e, categoryMap));
+};
+
+/** Gets expenses in an inclusive calendar-date range, including ISO timestamps. */
+export const getAllExpensesByDateRange = async (
   userId: string,
-  targetDate: string,
+  startDate: string,
+  endDate: string,
 ): Promise<ExpenseWithCategory[]> => {
   const expenses = await database
     .get<Expense>('expenses')
     .query(
       Q.where('user_id', userId),
-      Q.where('date', Q.like(`${Q.sanitizeLikeString(targetDate)}%`)),
+      Q.where('date', Q.gte(startDate)),
+      Q.where('date', Q.lt(formatDate(parseDate(endDate).add(1, 'day'), 'YYYY-MM-DD'))),
     )
     .fetch();
 
@@ -192,16 +187,10 @@ export const getAllExpensesByDate = async (
 /**
  * Gets all expenses for a user in a specific month (YYYY-MM prefix match)
  */
-export const getAllExpensesByMonth = async (
-  userId: string,
-  yearMonth: string,
-): Promise<ExpenseWithCategory[]> => {
+export const getAllExpensesByMonth = async (userId: string, yearMonth: string): Promise<ExpenseWithCategory[]> => {
   const expenses = await database
     .get<Expense>('expenses')
-    .query(
-      Q.where('user_id', userId),
-      Q.where('date', Q.like(`${Q.sanitizeLikeString(yearMonth)}%`)),
-    )
+    .query(Q.where('user_id', userId), Q.where('date', Q.like(`${Q.sanitizeLikeString(yearMonth)}%`)))
     .fetch();
 
   const categoryMap = await buildCategoryMap(userId);
@@ -247,13 +236,8 @@ export const getAllExpensesByCategoryAndMonth = async (
  * this app does not reach. Revisit only if profiling on a real database shows
  * this in a hot path.
  */
-export const getAvailableExpenseYears = async (
-  userId: string,
-): Promise<number[]> => {
-  const raws = await database
-    .get<Expense>('expenses')
-    .query(Q.where('user_id', userId))
-    .unsafeFetchRaw();
+export const getAvailableExpenseYears = async (userId: string): Promise<number[]> => {
+  const raws = await database.get<Expense>('expenses').query(Q.where('user_id', userId)).unsafeFetchRaw();
 
   const years = new Set<number>();
   for (const r of raws) {
@@ -268,4 +252,3 @@ export const getAvailableExpenseYears = async (
 
   return Array.from(years).sort((a, b) => a - b);
 };
-

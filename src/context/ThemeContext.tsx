@@ -1,6 +1,6 @@
-import React, {createContext, useContext, useState, useCallback, useMemo, type ReactNode} from 'react';
+import React, {createContext, useContext, useState, useCallback, useMemo, useEffect, type ReactNode} from 'react';
 import {useColorScheme} from 'react-native';
-import StorageService from '../utils/asyncStorageService';
+import StorageService, {storage} from '../utils/asyncStorageService';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
@@ -90,6 +90,14 @@ const getInitialThemeMode = (): ThemeMode => {
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({children}) => {
   const systemColorScheme = useColorScheme();
   const [themeMode, setThemeModeState] = useState<ThemeMode>(getInitialThemeMode);
+  useEffect(() => {
+    const listener = storage.addOnValueChangedListener(key => {
+      if (key === 'themePreference') {
+        setThemeModeState(getInitialThemeMode());
+      }
+    });
+    return () => listener.remove();
+  }, []);
 
   const resolvedTheme: ResolvedTheme = useMemo(() => {
     if (themeMode === 'system') {

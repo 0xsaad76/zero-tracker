@@ -1,6 +1,6 @@
 import {useCallback} from 'react';
 import useThemeColors from '../../hooks/useThemeColors';
-import {deleteAllData} from '../../watermelondb/services';
+import {deleteAllData} from '../../cloud';
 import {navigate} from '../../utils/navigationUtils';
 
 const useWelcome = () => {

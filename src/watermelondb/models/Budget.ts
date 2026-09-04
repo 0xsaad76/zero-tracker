@@ -10,11 +10,7 @@ export default class Budget extends Model {
   };
 
   @text('user_id') userId!: string;
-  /**
-   * Reserved for per-category budgets, which are not implemented yet: the
-   * column is optional in the schema and every writer stores ''. Typed as
-   * string (not string | null) to match what is actually written.
-   */
+  /** Empty string means an overall limit; otherwise this owns a category limit. */
   @text('category_id') categoryId!: string;
   @field('amount') amount!: number;
   @text('month') month!: string;

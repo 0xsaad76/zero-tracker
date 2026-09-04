@@ -8,6 +8,7 @@ import Debt from '../models/Debt';
 import Budget from '../models/Budget';
 import {sanitizeString, DEFAULTS} from '../../backend/sanitize';
 import type {ExportData} from '../../backend/export/format';
+import {getBackupPreferences} from '../../utils/backupPreferences';
 
 export type {ExportData} from '../../backend/export/format';
 
@@ -17,16 +18,15 @@ export type {ExportData} from '../../backend/export/format';
  */
 export const getAllData = async (): Promise<ExportData | null> => {
   try {
-    const [users, categories, expenses, currencies, debtors, debts, budgets] =
-      await Promise.all([
-        database.get<User>('users').query().fetch(),
-        database.get<Category>('categories').query().fetch(),
-        database.get<Expense>('expenses').query().fetch(),
-        database.get<Currency>('currencies').query().fetch(),
-        database.get<Debtor>('debtors').query().fetch(),
-        database.get<Debt>('debts').query().fetch(),
-        database.get<Budget>('budgets').query().fetch(),
-      ]);
+    const [users, categories, expenses, currencies, debtors, debts, budgets] = await Promise.all([
+      database.get<User>('users').query().fetch(),
+      database.get<Category>('categories').query().fetch(),
+      database.get<Expense>('expenses').query().fetch(),
+      database.get<Currency>('currencies').query().fetch(),
+      database.get<Debtor>('debtors').query().fetch(),
+      database.get<Debt>('debts').query().fetch(),
+      database.get<Budget>('budgets').query().fetch(),
+    ]);
 
     const categoryMap = new Map<string, string>();
     categories.forEach(c => {
@@ -39,6 +39,7 @@ export const getAllData = async (): Promise<ExportData | null> => {
     });
 
     return {
+      preferences: getBackupPreferences(),
       users: users.map(u => ({
         username: u.username,
         email: u.email,
@@ -79,6 +80,7 @@ export const getAllData = async (): Promise<ExportData | null> => {
         amount: b.amount,
         month: b.month,
         budgetType: b.budgetType,
+        category: b.categoryId ? {name: categoryMap.get(b.categoryId) ?? 'Unknown'} : undefined,
       })),
     };
   } catch (error) {
@@ -88,4 +90,3 @@ export const getAllData = async (): Promise<ExportData | null> => {
     return null;
   }
 };
-

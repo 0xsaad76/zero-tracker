@@ -1,4 +1,5 @@
 import {NavigationContainerRef, CommonActions} from '@react-navigation/native';
+import type {GestureResponderEvent} from 'react-native';
 import type {HomeStackParamList, OnboardingStackParamList} from '../navigation/types';
 
 type AllScreens = HomeStackParamList & OnboardingStackParamList;
@@ -16,9 +17,7 @@ export const navigate = <T extends keyof AllScreens>(
   if (navigationRef) {
     navigationRef.dispatch(CommonActions.navigate({name: name as string, params: args[0]}));
   } else if (__DEV__) {
-    console.error(
-      'Navigation reference is not set. Make sure to call setNavigationRef.',
-    );
+    console.error('Navigation reference is not set. Make sure to call setNavigationRef.');
   }
 };
 
@@ -26,19 +25,19 @@ export const navigate = <T extends keyof AllScreens>(
  * Goes back, then runs `action` — but ONLY if the navigation actually
  * happened. The callback used to run unconditionally, so a null ref produced
  * a screen that stayed put while its "we have left this screen" side effect
- * fired anyway. Returns whether the navigation was dispatched.
+ * fired anyway. Also accepts the touch event supplied when used directly as
+ * an onPress handler; only function arguments are invoked as callbacks.
+ * Returns whether the navigation was dispatched.
  */
-export const goBack = (action?: () => void): boolean => {
+export const goBack = (action?: (() => void) | GestureResponderEvent): boolean => {
   if (!navigationRef) {
     if (__DEV__) {
-      console.error(
-        'Navigation reference is not set. Make sure to call setNavigationRef.',
-      );
+      console.error('Navigation reference is not set. Make sure to call setNavigationRef.');
     }
     return false;
   }
 
   navigationRef.dispatch(CommonActions.goBack());
-  action?.();
+  if (typeof action === 'function') action();
   return true;
 };

@@ -15,24 +15,47 @@ const BudgetSheet: React.FC<SheetProps<'budget-sheet'>> = React.memo(props => {
   const {t} = useTranslation();
   const colors = useThemeColors();
   const currentAmount = props.payload?.currentAmount;
+  const period = props.payload?.period ?? 'monthly';
   const isRecurring = props.payload?.isRecurring ?? false;
   const [amount, setAmount] = useState(currentAmount ? String(currentAmount) : '');
   const [everyMonth, setEveryMonth] = useState(isRecurring);
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-  const parsedAmount = Number.parseFloat(amount);
-  const isValid = !Number.isNaN(parsedAmount) && parsedAmount > 0;
+  const parsedAmount = Number(amount);
+  const isValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
 
-  const handleSave = useCallback(() => {
-    if (isValid) {
-      props.payload?.onSave?.(parsedAmount, everyMonth);
+  const handleSave = useCallback(async () => {
+    if (!isValid || saving) {
+      return;
     }
-    void SheetManager.hide(props.sheetId);
-  }, [props, isValid, parsedAmount, everyMonth]);
+    setSaving(true);
+    setFailed(false);
+    try {
+      await props.payload?.onSave?.(parsedAmount, period === 'weekly' ? true : everyMonth);
+      await SheetManager.hide(props.sheetId);
+    } catch {
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  }, [props, isValid, parsedAmount, everyMonth, period, saving]);
 
-  const handleRemove = useCallback(() => {
-    props.payload?.onRemove?.();
-    void SheetManager.hide(props.sheetId);
-  }, [props]);
+  const handleRemove = useCallback(async () => {
+    if (saving) {
+      return;
+    }
+    setSaving(true);
+    setFailed(false);
+    try {
+      await props.payload?.onRemove?.();
+      await SheetManager.hide(props.sheetId);
+    } catch {
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  }, [props, saving]);
 
   // Shared with AmountInput. The old inline version stripped every character
   // outside [0-9.], which turned a European "12,50" into 1250 — a silent 100x
@@ -54,13 +77,23 @@ const BudgetSheet: React.FC<SheetProps<'budget-sheet'>> = React.memo(props => {
     <CustomBottomSheet
       sheetId={props.sheetId}
       header={{
-        title: t('sheets.setBudget'),
-        showCloseButton: true,
+        title: t(period === 'weekly' ? 'sheets.setWeeklyLimit' : 'sheets.setMonthlyLimit'),
+        showCloseButton: !saving,
         onClosePress: () => void SheetManager.hide(props.sheetId),
       }}
-      gestureEnabled>
+      closeOnTouchBackdrop={!saving}
+      gestureEnabled={!saving}>
       <View style={[gs.px20, gs.pb10, gs.pt5]}>
-        {props.payload?.monthLabel ? (
+        {props.payload?.scopeLabel ? (
+          <PrimaryText size={13} weight="semibold" style={gs.mb5}>
+            {props.payload.scopeLabel}
+          </PrimaryText>
+        ) : null}
+        {period === 'weekly' ? (
+          <PrimaryText size={12} color={colors.secondaryText} style={gs.mb10}>
+            {t('sheets.budgetForEveryWeek')}
+          </PrimaryText>
+        ) : props.payload?.monthLabel ? (
           <PrimaryText size={12} color={colors.secondaryText} style={gs.mb10}>
             {everyMonth
               ? t('sheets.budgetForEveryMonth')
@@ -68,7 +101,7 @@ const BudgetSheet: React.FC<SheetProps<'budget-sheet'>> = React.memo(props => {
           </PrimaryText>
         ) : null}
         <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>
-          {t('sheets.monthlyBudgetLabel')}
+          {t(period === 'weekly' ? 'sheets.weeklyBudgetLabel' : 'sheets.monthlyBudgetLabel')}
         </PrimaryText>
 
         <View
@@ -88,6 +121,7 @@ const BudgetSheet: React.FC<SheetProps<'budget-sheet'>> = React.memo(props => {
             placeholderTextColor={colors.secondaryText}
             keyboardType="decimal-pad"
             autoFocus
+            editable={!saving}
           />
           {symbolIsSuffix && budgetSymbol}
         </View>
@@ -95,41 +129,47 @@ const BudgetSheet: React.FC<SheetProps<'budget-sheet'>> = React.memo(props => {
         {/* One accessible node, not two: the row used to be a TouchableOpacity
             wrapping a Switch, which produced a duplicate a11y target and two
             toggle paths. The row is now the switch. */}
-        <TouchableOpacity
-          onPress={() => setEveryMonth(prev => !prev)}
-          activeOpacity={0.7}
-          accessibilityRole="switch"
-          accessibilityState={{checked: everyMonth}}
-          accessibilityLabel={t('sheets.everyMonth')}
-          accessibilityHint={t('sheets.everyMonthHint')}
-          style={[gs.rowBetweenCenter, gs.mt15, gs.px3]}>
-          <View style={gs.flex1}>
-            <PrimaryText size={13} weight="medium">
-              {t('sheets.everyMonth')}
-            </PrimaryText>
-            <PrimaryText size={11} color={colors.secondaryText} style={gs.mt2}>
-              {t('sheets.everyMonthHint')}
-            </PrimaryText>
-          </View>
-          <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
-            <Switch
-              value={everyMonth}
-              trackColor={{false: colors.secondaryAccent, true: colors.accentGreen}}
-            />
-          </View>
-        </TouchableOpacity>
+        {period === 'monthly' ? (
+          <TouchableOpacity
+            disabled={saving}
+            onPress={() => setEveryMonth(prev => !prev)}
+            activeOpacity={0.7}
+            accessibilityRole="switch"
+            accessibilityState={{checked: everyMonth}}
+            accessibilityLabel={t('sheets.everyMonth')}
+            accessibilityHint={t('sheets.everyMonthHint')}
+            style={[gs.rowBetweenCenter, gs.mt15, gs.px3]}>
+            <View style={gs.flex1}>
+              <PrimaryText size={13} weight="medium">
+                {t('sheets.everyMonth')}
+              </PrimaryText>
+              <PrimaryText size={11} color={colors.secondaryText} style={gs.mt2}>
+                {t('sheets.everyMonthHint')}
+              </PrimaryText>
+            </View>
+            <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
+              <Switch value={everyMonth} trackColor={{false: colors.secondaryAccent, true: colors.accentGreen}} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
+        {failed ? (
+          <PrimaryText color={colors.accentOrange} size={12} style={gs.mt10}>
+            {t('settings.budgetSaveFailed')}
+          </PrimaryText>
+        ) : null}
         <View style={gs.mt20}>
           <PrimaryButton
             onPress={handleSave}
             colors={colors}
             buttonTitle={currentAmount ? t('common.update') : t('sheets.setBudgetButton')}
-            disabled={!isValid}
+            disabled={!isValid || saving}
+            loading={saving}
           />
         </View>
 
         {currentAmount ? (
-          <TouchableOpacity onPress={handleRemove} style={[gs.center, gs.mt15]}>
+          <TouchableOpacity disabled={saving} onPress={handleRemove} style={[gs.center, gs.mt15]}>
             <View style={gs.rowCenter}>
               <Icon name="trash-2" size={14} color={colors.accentOrange} />
               <PrimaryText size={13} color={colors.accentOrange} style={gs.ml8}>

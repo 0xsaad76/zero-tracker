@@ -44,6 +44,7 @@ export interface PlannedBudget {
   amount: number;
   month: string;
   budgetType: string;
+  categoryName?: string;
 }
 
 export interface PlannedExpense {
@@ -130,12 +131,14 @@ export const buildImportPlan = (data: ExportData): ImportPlan => {
 
   const budgetsByKey = new Map<string, PlannedBudget>();
   for (const budget of data.budgets) {
-    const key = `${budget.month}|${budget.budgetType}`;
+    const categoryName = budget.category?.name;
+    const key = `${budget.month}|${budget.budgetType}|${categoryName ?? ''}`;
     if (!budgetsByKey.has(key)) {
       budgetsByKey.set(key, {
         amount: budget.amount,
         month: budget.month,
         budgetType: budget.budgetType,
+        categoryName,
       });
     }
   }
@@ -164,6 +167,19 @@ export const buildImportPlan = (data: ExportData): ImportPlan => {
     if (!categoriesByName.has(expense.categoryName)) {
       categoriesByName.set(expense.categoryName, {
         name: expense.categoryName,
+        status: true,
+        icon: DEFAULTS.icon,
+        color: DEFAULTS.color,
+        autoCreated: true,
+      });
+      autoCreatedCategories++;
+    }
+  }
+
+  for (const budget of budgetsByKey.values()) {
+    if (budget.categoryName && !categoriesByName.has(budget.categoryName)) {
+      categoriesByName.set(budget.categoryName, {
+        name: budget.categoryName,
         status: true,
         icon: DEFAULTS.icon,
         color: DEFAULTS.color,

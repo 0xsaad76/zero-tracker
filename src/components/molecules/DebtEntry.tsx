@@ -1,4 +1,4 @@
-import React, {useState, memo, useCallback} from 'react';
+import React, {useState, memo, useCallback, useEffect, useRef} from 'react';
 import {View, TouchableOpacity} from 'react-native';
 import {useTranslation} from 'react-i18next';
 import AppHeader from '../../components/atoms/AppHeader';
@@ -7,7 +7,7 @@ import PrimaryButton from '../../components/atoms/PrimaryButton';
 import PrimaryView from '../../components/atoms/PrimaryView';
 import {goBack} from '../../utils/navigationUtils';
 import useThemeColors from '../../hooks/useThemeColors';
-import {createDebt, updateDebtById} from '../../watermelondb/services';
+import {createDebt, updateDebtById} from '../../cloud';
 import {useAppDispatch, useAppSelector} from '../../redux/hooks';
 import {selectUserId} from '../../redux/slice/userIdSlice';
 import {fetchAllDebts, fetchDebtsByDebtor} from '../../redux/slice/debtDataSlice';
@@ -18,6 +18,8 @@ import {expenseAmountSchema, expenseSchema} from '../../utils/validationSchema';
 import PrimaryText from '../atoms/PrimaryText';
 import {gs} from '../../styles/globalStyles';
 import AmountInput from '../atoms/AmountInput';
+import {useDialog} from '../../context/DialogContext';
+import {requireCloudUser} from '../../cloud/records';
 
 interface DebtEntryProps {
   buttonText: string;
@@ -26,9 +28,46 @@ interface DebtEntryProps {
 
 const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
   const {t} = useTranslation();
+  const {showAlert} = useDialog();
+  const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const showSaveFailure = useCallback(
+    async (capturedUserId: string) => {
+      if (!mountedRef.current) {
+        return;
+      }
+      try {
+        requireCloudUser(capturedUserId);
+      } catch {
+        return;
+      }
+      await showAlert({
+        type: 'error',
+        message: 'Could not save your debt. Check your connection and try again.',
+      });
+    },
+    [showAlert],
+  );
   const colors = useThemeColors();
   const dispatch = useAppDispatch();
-  const {debtId = '', debtDescription = '', amount = 0, debtorName = '', debtDate = '', debtorId = '', debtType = 'Borrow'} = route.params ?? {};
+  const {
+    debtId = '',
+    debtDescription = '',
+    amount = 0,
+    debtorName = '',
+    debtDate = '',
+    debtorId = '',
+    debtType = 'Borrow',
+  } = route.params ?? {};
   const isAddButton = buttonText === 'Add';
   const [hasInteracted, setHasInteracted] = useState(false);
   const [debtName, setDebtName] = useState(isAddButton ? '' : debtDescription);
@@ -44,37 +83,71 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
     expenseSchema.safeParse(debtName).success && expenseAmountSchema.safeParse(Number(debtAmount)).success;
 
   const handleAddDebt = useCallback(async () => {
-    if (!isValid) {
+    if (savingRef.current || !mountedRef.current || !isValid) {
       return;
     }
+    savingRef.current = true;
+    setIsSaving(true);
+    const capturedUserId = userId;
     try {
-      await createDebt(userId, Number(debtAmount), debtName, debtorId, createdAt, debtsType);
-      dispatch(fetchAllDebts());
-      dispatch(fetchDebtsByDebtor(debtorId));
+      requireCloudUser(capturedUserId);
+      await createDebt(capturedUserId, Number(debtAmount), debtName, debtorId, createdAt, debtsType);
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
+      await Promise.all([dispatch(fetchAllDebts()), dispatch(fetchDebtsByDebtor(debtorId))]);
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
       goBack();
     } catch (error) {
       if (__DEV__) {
         console.error('Error creating debt:', error);
       }
+      await showSaveFailure(capturedUserId);
+    } finally {
+      savingRef.current = false;
+      if (mountedRef.current) {
+        setIsSaving(false);
+      }
     }
-  }, [isValid, userId, debtAmount, debtName, debtorId, createdAt, debtsType, dispatch]);
+  }, [isValid, userId, debtAmount, debtName, debtorId, createdAt, debtsType, dispatch, showSaveFailure]);
 
   const handleUpdateDebt = useCallback(async () => {
-    if (!isValid) {
+    if (savingRef.current || !mountedRef.current || !isValid) {
       return;
     }
+    savingRef.current = true;
+    setIsSaving(true);
+    const capturedUserId = userId;
     try {
+      requireCloudUser(capturedUserId);
       await updateDebtById(debtId, Number(debtAmount), debtName, createdAt, debtsType);
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
 
-      dispatch(fetchAllDebts());
-      dispatch(fetchDebtsByDebtor(debtorId));
+      await Promise.all([dispatch(fetchAllDebts()), dispatch(fetchDebtsByDebtor(debtorId))]);
+      requireCloudUser(capturedUserId);
+      if (!mountedRef.current) {
+        return;
+      }
       goBack();
     } catch (error) {
       if (__DEV__) {
         console.error('Error updating debt:', error);
       }
+      await showSaveFailure(capturedUserId);
+    } finally {
+      savingRef.current = false;
+      if (mountedRef.current) {
+        setIsSaving(false);
+      }
     }
-  }, [isValid, debtId, debtorId, debtAmount, debtName, createdAt, debtsType, dispatch]);
+  }, [isValid, debtId, debtorId, debtAmount, debtName, createdAt, debtsType, dispatch, userId, showSaveFailure]);
 
   // Gates validation errors until the user leaves the field (see ExpenseEntry).
   const handleAmountBlur = useCallback(() => {
@@ -106,13 +179,7 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
                 key={debtTypeOption}
                 onPress={() => setDebtsType(debtTypeOption)}
                 activeOpacity={0.7}
-                style={[
-                  gs.py8,
-                  gs.px14,
-                  gs.rounded12,
-                  gs.center,
-                  {backgroundColor: bgColor},
-                ]}>
+                style={[gs.py8, gs.px14, gs.rounded12, gs.center, {backgroundColor: bgColor}]}>
                 <PrimaryText
                   size={13}
                   weight={isSelected ? 'semibold' : 'regular'}
@@ -133,7 +200,9 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
           schema={expenseSchema}
         />
 
-        <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>{t('transaction.amountLabel')}</PrimaryText>
+        <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>
+          {t('transaction.amountLabel')}
+        </PrimaryText>
         <AmountInput
           value={debtAmount}
           onChangeText={setDebtAmount}
@@ -166,7 +235,8 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
           onPress={isAddButton ? handleAddDebt : handleUpdateDebt}
           colors={colors}
           buttonTitle={isAddButton ? t('common.add') : t('common.update')}
-          disabled={!isValid}
+          disabled={isSaving || !isValid}
+          loading={isSaving}
         />
       </View>
     </PrimaryView>

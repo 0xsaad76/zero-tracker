@@ -13,9 +13,8 @@ import PrimaryText from '../../components/atoms/PrimaryText';
 import EmptyState from '../../components/atoms/EmptyState';
 import useFormatAmount from '../../hooks/useFormatAmount';
 import {SheetManager} from 'react-native-actions-sheet';
-import DailyBudgetRow from '../../components/atoms/DailyBudgetRow';
 import {gs, hitSlop} from '../../styles/globalStyles';
-import {computeDailyAllowance} from '../../utils/budgetMath';
+import BudgetProgressCard from '../../components/molecules/BudgetProgressCard';
 
 const HomeScreen = () => {
   const {
@@ -34,12 +33,23 @@ const HomeScreen = () => {
     todayTotal,
     isCurrentMonth,
     daysInMonth,
-    currentBudget,
+    budgets,
+    categories,
+    weeklyTransactions,
+    weekRange,
+    weeklyReady,
+    monthlyReady,
+    weeklyError,
+    monthlyError,
+    showBudgetProgress,
     handleMonthYearSelect,
   } = useHome();
   const {t} = useTranslation();
   const formatAmount = useFormatAmount();
-  const {shouldShowTutorial, tutorialRef, dismissTutorial} = useSwipeTutorial({screen: 'home', itemCount: sortedTransactions.length});
+  const {shouldShowTutorial, tutorialRef, dismissTutorial} = useSwipeTutorial({
+    screen: 'home',
+    itemCount: sortedTransactions.length,
+  });
 
   const openMonthPicker = useCallback(() => {
     void SheetManager.show('month-year-picker-sheet', {
@@ -51,19 +61,6 @@ const HomeScreen = () => {
       },
     });
   }, [selectedMonthIndex, selectedYear, availableYears, handleMonthYearSelect]);
-
-  const budgetPct = currentBudget ? Math.min(Math.round((totalSpent / currentBudget.amount) * 100), 999) : 0;
-  const budgetExceeded = currentBudget ? totalSpent > currentBudget.amount : false;
-  // Adaptive: what is left of the budget, spread over the remaining days.
-  // new Date() deliberately inline — a module-level "today" goes stale at midnight.
-  const {allowance: dailyBudget} = computeDailyAllowance({
-    monthlyBudget: currentBudget?.amount ?? 0,
-    spentBeforeToday: totalSpent - todayTotal,
-    dayOfMonth: new Date().getDate(),
-    daysInMonth,
-    isCurrentMonth,
-  });
-  const dailyLeft = dailyBudget - todayTotal;
 
   const listHeader = useMemo(
     () => (
@@ -89,7 +86,9 @@ const HomeScreen = () => {
             </PrimaryText>
             {todayTotal > 0 ? (
               <>
-                <PrimaryText size={11} color={colors.buttonText} style={{opacity: 0.7}}>·</PrimaryText>
+                <PrimaryText size={11} color={colors.buttonText} style={{opacity: 0.7}}>
+                  ·
+                </PrimaryText>
                 <PrimaryText size={11} color={colors.buttonText} variant="number" style={{opacity: 0.7}}>
                   {t('home.today')}: {formatAmount(todayTotal)}
                 </PrimaryText>
@@ -98,36 +97,46 @@ const HomeScreen = () => {
           </View>
         </TouchableOpacity>
 
-        {currentBudget ? (
-          <View style={[gs.px14, gs.py10, gs.rounded12, gs.mt6, {backgroundColor: colors.secondaryAccent}]}>
-            <View style={gs.rowBetweenCenter}>
-              <PrimaryText size={12} weight="semibold" variant="number" color={budgetExceeded ? colors.accentOrange : colors.primaryText}>
-                {formatAmount(Math.max(currentBudget.amount - totalSpent, 0))} {t('home.remaining')}
-              </PrimaryText>
-              <PrimaryText size={11} variant="number" color={colors.secondaryText}>
-                {budgetPct}%
-              </PrimaryText>
-            </View>
-            <View style={[gs.rounded4, gs.h4, gs.mt8, {backgroundColor: colors.secondaryContainerColor}]}>
-              <View
-                style={[
-                  gs.rounded4,
-                  gs.h4,
-                  {
-                    width: `${Math.min(budgetPct, 100)}%`,
-                    backgroundColor: budgetExceeded ? colors.accentOrange : colors.accentGreen,
-                  },
-                ]}
-              />
-            </View>
-            <View style={gs.mt6}>
-              <DailyBudgetRow dailyBudget={dailyBudget} dailyLeft={dailyLeft} isCurrentMonth={isCurrentMonth} colors={colors} formatAmount={formatAmount} t={t} />
-            </View>
-          </View>
-        ) : null}
+        <BudgetProgressCard
+          visible={showBudgetProgress}
+          monthlyExpenses={sortedTransactions}
+          weeklyExpenses={weeklyTransactions}
+          weekRange={weekRange}
+          weeklyReady={weeklyReady}
+          monthlyReady={monthlyReady}
+          weeklyError={weeklyError}
+          monthlyError={monthlyError}
+          budgets={budgets}
+          categories={categories}
+          todayTotal={todayTotal}
+          daysInMonth={daysInMonth}
+          isCurrentMonth={isCurrentMonth}
+        />
       </View>
     ),
-    [selectedMonthName, selectedYear, totalSpent, transactionCount, todayTotal, isCurrentMonth, currentBudget, budgetPct, budgetExceeded, dailyBudget, dailyLeft, colors, openMonthPicker, formatAmount, t],
+    [
+      selectedMonthName,
+      selectedYear,
+      totalSpent,
+      transactionCount,
+      todayTotal,
+      isCurrentMonth,
+      budgets,
+      categories,
+      weeklyTransactions,
+      weekRange,
+      weeklyReady,
+      monthlyReady,
+      weeklyError,
+      monthlyError,
+      showBudgetProgress,
+      sortedTransactions,
+      daysInMonth,
+      colors,
+      openMonthPicker,
+      formatAmount,
+      t,
+    ],
   );
 
   const listEmpty = useMemo(

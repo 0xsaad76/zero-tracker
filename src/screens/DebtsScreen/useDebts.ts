@@ -3,7 +3,7 @@ import useThemeColors from '../../hooks/useThemeColors';
 import {fetchDebtors, selectDebtorData} from '../../redux/slice/debtorDataSlice';
 import {fetchAllDebts, selectAllDebts} from '../../redux/slice/debtDataSlice';
 import {useCallback, useMemo, useState} from 'react';
-import {DebtorData as Debtor, DebtData as Debt} from '../../watermelondb/services';
+import {DebtorData as Debtor, DebtData as Debt} from '../../cloud';
 import {useFocusEffect} from '@react-navigation/native';
 
 const useDebts = () => {

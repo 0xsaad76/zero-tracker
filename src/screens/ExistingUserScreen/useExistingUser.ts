@@ -7,20 +7,20 @@ import {isValidExportKey} from '../../backend/export/key';
 import {useDialog} from '../../context/DialogContext';
 import {pick, types, isErrorWithCode, errorCodes} from '@react-native-documents/picker';
 import RNFS from 'react-native-fs';
-import {getAllUsers, importAllData} from '../../watermelondb/services';
+import {getAllUsers, importAllData} from '../../cloud';
 import {fetchCategories} from '../../redux/slice/categoryDataSlice';
 import {fetchDebtors} from '../../redux/slice/debtorDataSlice';
 import {fetchUserData} from '../../redux/slice/userIdSlice';
 import {fetchCurrency} from '../../redux/slice/currencyDataSlice';
 import {fetchExpenses} from '../../redux/slice/expenseDataSlice';
 import {fetchAllDebts} from '../../redux/slice/debtDataSlice';
-import StorageService from '../../utils/asyncStorageService';
 import {setIsOnboarded} from '../../redux/slice/isOnboardedSlice';
 import {useAppDispatch} from '../../redux/hooks';
 import {refreshYearsCache} from '../../utils/availableYearsCache';
 import {upgradeExportData} from '../../backend/export/upgrader';
 import type {ExportData} from '../../backend/export/format';
 import {validateExportEnvelope} from '../../backend/export/validate';
+import {requireCloudUser} from '../../cloud/records';
 
 type ImportedData = ExportData;
 
@@ -112,7 +112,9 @@ const useExistingUser = () => {
   };
 
   const importData = async () => {
+    let owner: string | undefined;
     try {
+      owner = requireCloudUser();
       setIsSyncing(false);
       setIsSyncComplete(false);
       setSyncError(null);
@@ -179,11 +181,14 @@ const useExistingUser = () => {
       // The file is valid — only NOW may existing data be touched, and only
       // with consent. The wipe itself happens inside importAllData's single
       // transaction, so cancelling here (or a failure later) loses nothing.
+      requireCloudUser(owner);
       const existingUsers = await getAllUsers();
+      requireCloudUser(owner);
       if (existingUsers.length > 0) {
         const confirmed = await showDialog({
           type: 'warning',
-          message: t('existingUser.replaceDataWarning'),
+          message:
+            'Restoring this backup will replace the financial records in your signed-in cloud account, on every device. Your Google sign-in identity is retained. Continue?',
         });
         if (!confirmed) {
           return;
@@ -195,12 +200,13 @@ const useExistingUser = () => {
       setIsSyncing(true);
       setSyncStatus(allStatuses('syncing'));
 
+      requireCloudUser(owner);
       const {userId, stats} = await importAllData(data);
+      requireCloudUser(owner);
 
       // Refetch failures must not mark a committed import as failed.
       try {
-        // The year cache is keyed by user id and the import minted a new one;
-        // rebuild it so the month picker reflects the restored data.
+        // The authenticated identity is retained; rebuild its cached years.
         await refreshYearsCache(userId);
         await refreshStores();
       } catch (refreshError) {
@@ -209,6 +215,7 @@ const useExistingUser = () => {
         }
       }
 
+      requireCloudUser(owner);
       setSyncStatus(allStatuses('done'));
       setSyncStats({
         categories: stats.categories,
@@ -222,6 +229,11 @@ const useExistingUser = () => {
       setIsSyncComplete(true);
       setUploadMessage(t('existingUser.allDataSynced'));
     } catch (error) {
+      try {
+        requireCloudUser(owner);
+      } catch {
+        return;
+      }
       if (__DEV__) {
         console.error('Error importing data:', error);
       }
@@ -243,7 +255,6 @@ const useExistingUser = () => {
   };
 
   const handleContinue = async () => {
-    StorageService.setItemSync('isOnboarded', JSON.stringify(true));
     dispatch(setIsOnboarded(true));
   };
 

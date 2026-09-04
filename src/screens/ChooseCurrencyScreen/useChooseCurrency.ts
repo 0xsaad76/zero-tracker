@@ -2,10 +2,10 @@ import {useState, useCallback, useRef} from 'react';
 import useThemeColors from '../../hooks/useThemeColors';
 import {useAppDispatch, useAppSelector} from '../../redux/hooks';
 import {selectUserId} from '../../redux/slice/userIdSlice';
-import {createCurrency} from '../../watermelondb/services';
-import StorageService from '../../utils/asyncStorageService';
+import {createCurrency} from '../../cloud';
 import {setIsOnboarded} from '../../redux/slice/isOnboardedSlice';
 import currencies from '../../../assets/jsons/currencies.json';
+import {useDialog} from '../../context/DialogContext';
 
 interface CurrencySelection {
   code: string;
@@ -15,6 +15,7 @@ interface CurrencySelection {
 
 const useChooseCurrency = () => {
   const colors = useThemeColors();
+  const {showAlert} = useDialog();
   const [search, setSearch] = useState('');
   const [filteredCurrencies, setFilteredCurrencies] = useState(currencies);
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencySelection | null>(null);
@@ -35,7 +36,6 @@ const useChooseCurrency = () => {
     try {
       await createCurrency(selectedCurrency.code, selectedCurrency.symbol, selectedCurrency.name, userId);
 
-      StorageService.setItemSync('isOnboarded', JSON.stringify(true));
       dispatch(setIsOnboarded(true));
     } catch (error) {
       if (__DEV__) {
@@ -44,8 +44,9 @@ const useChooseCurrency = () => {
       // Let the user retry rather than stranding them pre-onboarding.
       isSubmittingRef.current = false;
       setIsSubmitting(false);
+      await showAlert({type: 'error', message: 'Currency could not be saved. Check your connection and try again.'});
     }
-  }, [selectedCurrency, userId, dispatch]);
+  }, [selectedCurrency, userId, dispatch, showAlert]);
 
   const handleSearch = useCallback((text: string) => {
     setSearch(text);

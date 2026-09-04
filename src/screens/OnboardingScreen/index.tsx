@@ -8,6 +8,8 @@ import PrimaryView from '../../components/atoms/PrimaryView';
 import PrimaryText from '../../components/atoms/PrimaryText';
 import Icon from '../../components/atoms/Icons';
 import {gs} from '../../styles/globalStyles';
+import {navigate} from '../../utils/navigationUtils';
+import {useCloudAuth} from '../../context/CloudAuthContext';
 
 interface CategoryData {
   name: string;
@@ -18,17 +20,24 @@ interface CategoryData {
 const OnboardingScreen = () => {
   const {colors, handleSkip, handleSubmit, isSubmitting, toggleCategorySelection, isCategorySelected} = useOnboarding();
   const {t} = useTranslation();
+  const {signOut} = useCloudAuth();
 
   return (
     <PrimaryView colors={colors} style={gs.justifyBetween}>
       <View style={gs.flex1}>
         <TouchableOpacity style={[gs.selfEnd, gs.pt5p]} onPress={handleSkip}>
-          <PrimaryText size={13} weight="medium" color={colors.secondaryText}>{t('common.skip')}</PrimaryText>
+          <PrimaryText size={13} weight="medium" color={colors.secondaryText}>
+            {t('common.skip')}
+          </PrimaryText>
         </TouchableOpacity>
 
         <View style={gs.pt10p}>
-          <PrimaryText size={28} weight="bold">{t('onboarding.title')}</PrimaryText>
-          <PrimaryText size={28} weight="bold">{t('onboarding.titleSuffix')}</PrimaryText>
+          <PrimaryText size={28} weight="bold">
+            {t('onboarding.title')}
+          </PrimaryText>
+          <PrimaryText size={28} weight="bold">
+            {t('onboarding.titleSuffix')}
+          </PrimaryText>
         </View>
 
         <PrimaryText size={14} color={colors.secondaryText} style={[gs.mt6, gs.mb20]}>
@@ -40,7 +49,10 @@ const OnboardingScreen = () => {
             const isSelected = isCategorySelected(category.name);
 
             return (
-              <TouchableOpacity key={category.name} onPress={() => toggleCategorySelection(category)} activeOpacity={0.7}>
+              <TouchableOpacity
+                key={category.name}
+                onPress={() => toggleCategorySelection(category)}
+                activeOpacity={0.7}>
                 <View
                   style={[
                     gs.py8,
@@ -73,7 +85,32 @@ const OnboardingScreen = () => {
           })}
         </ScrollView>
       </View>
-      <PrimaryButton onPress={handleSubmit} colors={colors} buttonTitle={t('common.continue')} disabled={isSubmitting} />
+      <TouchableOpacity
+        accessibilityRole="button"
+        disabled={isSubmitting}
+        onPress={() => navigate('ExistingUserScreen')}
+        style={gs.py12}>
+        <PrimaryText size={13} color={colors.secondaryText}>
+          Restore an existing JSON backup
+        </PrimaryText>
+      </TouchableOpacity>
+      <TouchableOpacity
+        accessibilityRole="button"
+        disabled={isSubmitting}
+        onPress={() => {
+          void signOut();
+        }}
+        style={gs.py12}>
+        <PrimaryText size={13} color={colors.secondaryText}>
+          Sign out / choose another account
+        </PrimaryText>
+      </TouchableOpacity>
+      <PrimaryButton
+        onPress={handleSubmit}
+        colors={colors}
+        buttonTitle={t('common.continue')}
+        disabled={isSubmitting}
+      />
     </PrimaryView>
   );
 };

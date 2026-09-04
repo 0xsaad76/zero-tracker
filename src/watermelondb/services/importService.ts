@@ -10,6 +10,7 @@ import Budget from '../models/Budget';
 import {buildImportPlan, type ImportStats} from '../../backend/import/planner';
 import {sanitizeString} from '../../backend/sanitize';
 import type {ExportData} from '../../backend/export/format';
+import {restoreBackupPreferences} from '../../utils/backupPreferences';
 
 export interface ImportResult {
   userId: string;
@@ -32,26 +33,19 @@ export const importAllData = async (data: ExportData): Promise<ImportResult> => 
   const userId = nanoid(24);
 
   await database.write(async () => {
-    const [users, categories, expenses, currencies, debtors, debts, budgets] =
-      await Promise.all([
-        database.get<User>('users').query().fetch(),
-        database.get<Category>('categories').query().fetch(),
-        database.get<Expense>('expenses').query().fetch(),
-        database.get<Currency>('currencies').query().fetch(),
-        database.get<Debtor>('debtors').query().fetch(),
-        database.get<Debt>('debts').query().fetch(),
-        database.get<Budget>('budgets').query().fetch(),
-      ]);
+    const [users, categories, expenses, currencies, debtors, debts, budgets] = await Promise.all([
+      database.get<User>('users').query().fetch(),
+      database.get<Category>('categories').query().fetch(),
+      database.get<Expense>('expenses').query().fetch(),
+      database.get<Currency>('currencies').query().fetch(),
+      database.get<Debtor>('debtors').query().fetch(),
+      database.get<Debt>('debts').query().fetch(),
+      database.get<Budget>('budgets').query().fetch(),
+    ]);
 
-    const destroys = [
-      ...users,
-      ...categories,
-      ...expenses,
-      ...currencies,
-      ...debtors,
-      ...debts,
-      ...budgets,
-    ].map(record => record.prepareDestroyPermanently());
+    const destroys = [...users, ...categories, ...expenses, ...currencies, ...debtors, ...debts, ...budgets].map(
+      record => record.prepareDestroyPermanently(),
+    );
 
     const newUser = database.get<User>('users').prepareCreate(user => {
       user._raw.id = userId;
@@ -125,7 +119,7 @@ export const importAllData = async (data: ExportData): Promise<ImportResult> => 
     const newBudgets = plan.budgets.map(planned =>
       database.get<Budget>('budgets').prepareCreate(budget => {
         budget.userId = userId;
-        budget.categoryId = '';
+        budget.categoryId = planned.categoryName ? (categoryIdByName.get(planned.categoryName) ?? '') : '';
         budget.amount = planned.amount;
         budget.month = planned.month;
         budget.budgetType = planned.budgetType;
@@ -144,5 +138,6 @@ export const importAllData = async (data: ExportData): Promise<ImportResult> => 
     );
   });
 
+  restoreBackupPreferences(data.preferences);
   return {userId, stats: plan.stats};
 };

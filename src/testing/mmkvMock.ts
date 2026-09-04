@@ -8,9 +8,19 @@ type Stored = string | number | boolean;
 
 export const createMMKV = () => {
   const store = new Map<string, Stored>();
+  const listeners = new Set<(key: string) => void>();
   return {
+    addOnValueChangedListener: (listener: (key: string) => void) => {
+      listeners.add(listener);
+      return {
+        remove: () => {
+          listeners.delete(listener);
+        },
+      };
+    },
     set: (key: string, value: Stored) => {
       store.set(key, value);
+      listeners.forEach(listener => listener(key));
     },
     getString: (key: string) => {
       const value = store.get(key);
@@ -26,6 +36,7 @@ export const createMMKV = () => {
     },
     remove: (key: string) => {
       store.delete(key);
+      listeners.forEach(listener => listener(key));
     },
     contains: (key: string) => store.has(key),
     clearAll: () => {

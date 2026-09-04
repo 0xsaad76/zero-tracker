@@ -1,12 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- No INTERNET permission. Zero has no servers and makes no network
-         calls, so the release build is declared without it: the Play listing
-         shows no network access and `aapt dump permissions` on the shipped
-         APK proves the claim. Metro needs it in development, so it is
-         declared in src/debug/AndroidManifest.xml instead.
-         Store/GitHub links open in the browser and do not require it here. -->
+    <!-- Google authentication and private Supabase financial records. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Backup import/export on API <= 32; PermissionsAndroid auto-denies
          runtime requests for permissions that are not declared here. -->

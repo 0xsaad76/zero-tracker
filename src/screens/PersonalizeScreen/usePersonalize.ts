@@ -1,6 +1,6 @@
 import {useState, useCallback} from 'react';
 import useThemeColors from '../../hooks/useThemeColors';
-import {createUser} from '../../watermelondb/services';
+import {createUser} from '../../cloud';
 import {navigate} from '../../utils/navigationUtils';
 import {nameSchema} from '../../utils/validationSchema';
 

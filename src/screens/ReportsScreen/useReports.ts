@@ -19,8 +19,8 @@ import {selectMonthIndex, selectYear, setMonthSelection} from '../../redux/slice
 import {selectCurrencyCode, selectCurrencySymbol} from '../../redux/slice/currencyDataSlice';
 import {selectUserId} from '../../redux/slice/userIdSlice';
 import {fetchBudgetsByMonth, selectCurrentBudget} from '../../redux/slice/budgetDataSlice';
-import {upsertBudget, deleteBudget} from '../../watermelondb/services/budgetService';
-import {ExpenseData as ExpenseDocType} from '../../watermelondb/services';
+import {upsertBudget, deleteBudget} from '../../cloud/budgets';
+import {ExpenseData as ExpenseDocType} from '../../cloud';
 import {loadAvailableYears} from '../../utils/availableYearsCache';
 
 interface TransactionWithCategory extends ExpenseDocType {

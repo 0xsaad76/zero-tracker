@@ -1,4 +1,4 @@
-import {TouchableOpacity, View} from 'react-native';
+import {Alert, TouchableOpacity, View} from 'react-native';
 import React, {memo, useCallback} from 'react';
 import Icon from '../atoms/Icons';
 import MeshAvatar from '../atoms/MeshAvatar';
@@ -7,10 +7,11 @@ import {useAppDispatch, useAppSelector} from '../../redux/hooks';
 import {selectUserName, setUserName} from '../../redux/slice/userNameSlice';
 import {navigate} from '../../utils/navigationUtils';
 import PrimaryText from '../atoms/PrimaryText';
-import {updateUserById} from '../../watermelondb/services';
+import {updateUserById} from '../../cloud';
 import {selectUserId} from '../../redux/slice/userIdSlice';
 import {SheetManager} from 'react-native-actions-sheet';
 import {gs, hitSlop} from '../../styles/globalStyles';
+import {requireCloudUser} from '../../cloud/records';
 
 interface HeaderContainerProps {
   headerText: string;
@@ -28,11 +29,17 @@ const HeaderContainer: React.FC<HeaderContainerProps> = ({headerText}) => {
         currentName: userName,
         onUpdate: (newName: string) => {
           updateUserById(userId, {username: newName})
-            .then(() => dispatch(setUserName(newName)))
-            .catch(error => {
-              if (__DEV__) {
-                console.error('Error updating the name:', error);
+            .then(() => {
+              requireCloudUser(userId);
+              dispatch(setUserName(newName));
+            })
+            .catch(() => {
+              try {
+                requireCloudUser(userId);
+              } catch {
+                return;
               }
+              Alert.alert('Could not save name', 'Check your connection and try again.');
             });
         },
       },
@@ -51,7 +58,9 @@ const HeaderContainer: React.FC<HeaderContainerProps> = ({headerText}) => {
             meshColor={colors.buttonText}
           />
         </TouchableOpacity>
-        <PrimaryText size={16} weight="semibold">{headerText}</PrimaryText>
+        <PrimaryText size={16} weight="semibold">
+          {headerText}
+        </PrimaryText>
       </View>
       <TouchableOpacity onPress={() => navigate('SettingsScreen')} hitSlop={hitSlop}>
         <Icon name="settings" size={22} color={colors.secondaryText} />

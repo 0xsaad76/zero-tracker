@@ -67,9 +67,7 @@ describe('buildImportPlan — auto-create instead of dropping transactions', () 
   it('auto-creates a missing category referenced by an expense (nothing is skipped)', () => {
     const plan = buildImportPlan({
       ...emptyData,
-      expenses: [
-        {title: 'Chai', amount: 20, category: {name: 'Unknown'}, date: '2026-07-01'},
-      ],
+      expenses: [{title: 'Chai', amount: 20, category: {name: 'Unknown'}, date: '2026-07-01'}],
     });
     const unknown = plan.categories.find(c => c.name === 'Unknown');
     expect(unknown).toBeDefined();
@@ -82,9 +80,7 @@ describe('buildImportPlan — auto-create instead of dropping transactions', () 
   it('auto-creates a missing debtor referenced by a debt', () => {
     const plan = buildImportPlan({
       ...emptyData,
-      debts: [
-        {amount: 500, description: 'Lunch', debtor: {title: 'Ghost'}, date: '2026-07-01', type: 'Borrow'},
-      ],
+      debts: [{amount: 500, description: 'Lunch', debtor: {title: 'Ghost'}, date: '2026-07-01', type: 'Borrow'}],
     });
     const ghost = plan.debtors.find(d => d.title === 'Ghost');
     expect(ghost?.autoCreated).toBe(true);
@@ -97,9 +93,7 @@ describe('buildImportPlan — auto-create instead of dropping transactions', () 
     const plan = buildImportPlan({
       ...emptyData,
       categories: [category('Food', {categoryStatus: false})],
-      expenses: [
-        {title: 'Chai', amount: 20, category: {name: 'Food'}, date: '2026-07-01'},
-      ],
+      expenses: [{title: 'Chai', amount: 20, category: {name: 'Food'}, date: '2026-07-01'}],
     });
     expect(plan.categories).toHaveLength(1);
     expect(plan.stats.autoCreatedCategories).toBe(0);
@@ -141,18 +135,21 @@ describe('buildImportPlan — currencies and budgets', () => {
     expect(plan.currencies.find(c => c.code === 'INR')?.symbol).toBe('₹');
   });
 
-  it('dedupes budgets by (month, budgetType) and keeps distinct months', () => {
+  it('dedupes budgets by period, type and category while keeping category limits distinct', () => {
     const plan = buildImportPlan({
       ...emptyData,
       budgets: [
         {amount: 60000, month: '2026-07', budgetType: 'monthly'},
         {amount: 99999, month: '2026-07', budgetType: 'monthly'},
         {amount: 50000, month: 'recurring:2026-01', budgetType: 'monthly'},
+        {amount: 8000, month: '2026-07', budgetType: 'monthly', category: {name: 'Food'}},
       ],
     });
-    expect(plan.budgets).toHaveLength(2);
+    expect(plan.budgets).toHaveLength(3);
     expect(plan.budgets.find(b => b.month === '2026-07')?.amount).toBe(60000);
-    expect(plan.stats.budgets).toBe(2);
+    expect(plan.budgets.find(b => b.categoryName === 'Food')?.amount).toBe(8000);
+    expect(plan.categories.find(c => c.name === 'Food')?.autoCreated).toBe(true);
+    expect(plan.stats.budgets).toBe(3);
   });
 });
 

@@ -1,5 +1,5 @@
 import {TouchableOpacity, View} from 'react-native';
-import React, {useCallback, useMemo, useState, memo} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState, memo} from 'react';
 import type {RouteProp} from '@react-navigation/native';
 import {useTranslation} from 'react-i18next';
 import {useDialog} from '../../context/DialogContext';
@@ -13,7 +13,8 @@ import PrimaryButton from '../atoms/PrimaryButton';
 import useThemeColors from '../../hooks/useThemeColors';
 import {goBack} from '../../utils/navigationUtils';
 import {selectUserId} from '../../redux/slice/userIdSlice';
-import {createCategory, updateCategoryById} from '../../watermelondb/services';
+import {createCategory, createDefaultCategories, updateCategoryById} from '../../cloud';
+import {requireCloudUser} from '../../cloud/records';
 import {fetchCategories, selectCategoryData} from '../../redux/slice/categoryDataSlice';
 import {categorySchema} from '../../utils/validationSchema';
 import defaultCategories from '../../../assets/jsons/defaultCategories.json';
@@ -41,11 +42,13 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
   const categoryData = route?.params;
   const isAddButton = type === 'Add';
 
-  const [categoryName, setCategoryName] = useState(isAddButton ? '' : categoryData?.categoryName ?? '');
+  const [categoryName, setCategoryName] = useState(isAddButton ? '' : (categoryData?.categoryName ?? ''));
 
   const resolveIconParam = (val?: string): string | null => {
     // 'null' is a legacy sentinel that older rows/params may still carry.
-    if (!val || val === 'null' || val === '') { return null; }
+    if (!val || val === 'null' || val === '') {
+      return null;
+    }
     return val;
   };
 
@@ -71,70 +74,94 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
 
   const userId = useAppSelector(selectUserId);
   const isValid = categorySchema.safeParse(categoryName).success;
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const saveCategory = useCallback(
+    async (save: () => Promise<unknown>) => {
+      if (savingRef.current || !mountedRef.current) {
+        return;
+      }
+      const capturedUserId = userId;
+      savingRef.current = true;
+      setSaving(true);
+
+      try {
+        requireCloudUser(capturedUserId);
+        await save();
+        if (!mountedRef.current) {
+          return;
+        }
+        requireCloudUser(capturedUserId);
+        dispatch(fetchCategories());
+        goBack();
+      } catch (error) {
+        if (!mountedRef.current) {
+          return;
+        }
+        try {
+          requireCloudUser(capturedUserId);
+        } catch {
+          return;
+        }
+        if (__DEV__) {
+          console.error('Error saving category:', error);
+        }
+        await showAlert({type: 'error', message: t('category.createFailed')});
+      } finally {
+        savingRef.current = false;
+        if (mountedRef.current) {
+          setSaving(false);
+        }
+      }
+    },
+    [userId, dispatch, showAlert, t],
+  );
 
   const handleAddCategory = useCallback(async () => {
-    try {
-      await createCategory(categoryName, userId, selectedIcon, selectedColor);
-      dispatch(fetchCategories());
-      goBack();
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error creating category:', error);
-      }
+    if (!isValid) {
+      return;
     }
-  }, [categoryName, userId, selectedIcon, selectedColor, dispatch]);
+    await saveCategory(() => createCategory(categoryName, userId, selectedIcon, selectedColor));
+  }, [isValid, saveCategory, categoryName, userId, selectedIcon, selectedColor]);
 
   const handleAddFromDefaultCategory = useCallback(async () => {
-    // Was the one handler here with no try/catch: a rejected createCategory
-    // skipped both the refetch and goBack, leaving the user on a screen that
-    // looked like the tap did nothing at all.
-    try {
-      for (const category of selectedCategories) {
-        await createCategory(category.name, userId, category.icon ?? null, category.color ?? null);
-      }
-      dispatch(fetchCategories());
-      goBack();
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error creating default categories:', error);
-      }
-      // Some may have been created before the failure; refetch so the screen
-      // reflects what actually landed.
-      dispatch(fetchCategories());
-      await showAlert({type: 'error', message: t('category.createFailed')});
+    if (selectedCategories.length === 0) {
+      return;
     }
-  }, [selectedCategories, userId, dispatch, showAlert, t]);
+    await saveCategory(() => createDefaultCategories(userId, selectedCategories));
+  }, [selectedCategories, userId, saveCategory]);
 
   const handleUpdateCategory = useCallback(async () => {
-    if (!categoryData?.categoryId) { return; }
-    try {
-      await updateCategoryById(categoryData.categoryId, categoryName, selectedIcon ?? undefined, selectedColor ?? undefined);
-      dispatch(fetchCategories());
-      goBack();
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error updating category:', error);
-      }
+    if (!categoryData?.categoryId || !isValid) {
+      return;
     }
-  }, [categoryData?.categoryId, categoryName, selectedIcon, selectedColor, dispatch]);
+    const categoryId = categoryData.categoryId;
+    await saveCategory(() =>
+      updateCategoryById(categoryId, categoryName, selectedIcon ?? undefined, selectedColor ?? undefined),
+    );
+  }, [categoryData?.categoryId, isValid, categoryName, selectedIcon, selectedColor, saveCategory]);
 
   /** Creates the picked default chips AND the typed name, in one pass. */
   const handleAddBothDefaultsAndTyped = useCallback(async () => {
-    try {
-      for (const category of selectedCategories) {
-        await createCategory(category.name, userId, category.icon ?? null, category.color ?? null);
-      }
-      await createCategory(categoryName.trim(), userId, selectedIcon, selectedColor);
-      dispatch(fetchCategories());
-      goBack();
-    } catch (error) {
-      if (__DEV__) {
-        console.error('Error creating categories:', error);
-      }
-      dispatch(fetchCategories());
-      await showAlert({type: 'error', message: t('category.createFailed')});
+    if (!isValid) {
+      return;
     }
-  }, [selectedCategories, categoryName, userId, selectedIcon, selectedColor, dispatch, showAlert, t]);
+    await saveCategory(() =>
+      createDefaultCategories(userId, [
+        ...selectedCategories,
+        {name: categoryName.trim(), icon: selectedIcon ?? undefined, color: selectedColor ?? undefined},
+      ]),
+    );
+  }, [isValid, selectedCategories, categoryName, userId, selectedIcon, selectedColor, saveCategory]);
 
   /**
    * A typed name and picked default chips are two different intents, and this
@@ -250,7 +277,11 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
     <PrimaryView colors={colors} style={gs.justifyBetween} dismissKeyboardOnTouch>
       <View>
         <View style={[gs.mb20, gs.mt20]}>
-          <AppHeader onPress={goBack} colors={colors} text={isAddButton ? t('category.addTitle') : t('category.editTitle')} />
+          <AppHeader
+            onPress={goBack}
+            colors={colors}
+            text={isAddButton ? t('category.addTitle') : t('category.editTitle')}
+          />
         </View>
 
         <CustomInput
@@ -262,7 +293,9 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
           schema={categorySchema}
         />
 
-        <PrimaryText size={12} color={colors.secondaryText} style={gs.mb8}>{t('category.appearanceLabel')}</PrimaryText>
+        <PrimaryText size={12} color={colors.secondaryText} style={gs.mb8}>
+          {t('category.appearanceLabel')}
+        </PrimaryText>
         <View style={[gs.row, gs.gap8, gs.mb15]}>
           <TouchableOpacity
             onPress={handleOpenIconPicker}
@@ -276,21 +309,13 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
               gs.flex1,
               {backgroundColor: colors.secondaryAccent},
             ]}>
-            <View
-              style={[
-                gs.size32,
-                gs.roundedFull,
-                gs.center,
-                {backgroundColor: colors.containerColor},
-              ]}>
-              <Icon
-                name={selectedIcon ?? 'shapes'}
-                size={16}
-                color={colors.primaryText}
-              />
+            <View style={[gs.size32, gs.roundedFull, gs.center, {backgroundColor: colors.containerColor}]}>
+              <Icon name={selectedIcon ?? 'shapes'} size={16} color={colors.primaryText} />
             </View>
             <View style={gs.flex1}>
-              <PrimaryText size={11} color={colors.secondaryText}>{t('category.iconLabel')}</PrimaryText>
+              <PrimaryText size={11} color={colors.secondaryText}>
+                {t('category.iconLabel')}
+              </PrimaryText>
               <PrimaryText size={13} weight="medium">
                 {selectedIcon ? t('common.change') : t('common.choose')}
               </PrimaryText>
@@ -310,15 +335,12 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
               {backgroundColor: colors.secondaryAccent},
             ]}>
             <View
-              style={[
-                gs.size32,
-                gs.roundedFull,
-                gs.center,
-                {backgroundColor: selectedColor ?? colors.accentGreen},
-              ]}
+              style={[gs.size32, gs.roundedFull, gs.center, {backgroundColor: selectedColor ?? colors.accentGreen}]}
             />
             <View style={gs.flex1}>
-              <PrimaryText size={11} color={colors.secondaryText}>{t('category.colorLabel')}</PrimaryText>
+              <PrimaryText size={11} color={colors.secondaryText}>
+                {t('category.colorLabel')}
+              </PrimaryText>
               <PrimaryText size={13} weight="medium">
                 {selectedColor ? t('common.change') : t('common.choose')}
               </PrimaryText>
@@ -330,7 +352,9 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
           <>
             <View style={[gs.rowCenter, gs.gap8, gs.mb8]}>
               <View style={[gs.flex1, {height: 0.5, backgroundColor: colors.secondaryAccent}]} />
-              <PrimaryText size={11} color={colors.secondaryText}>{t('category.orPickFromDefaults')}</PrimaryText>
+              <PrimaryText size={11} color={colors.secondaryText}>
+                {t('category.orPickFromDefaults')}
+              </PrimaryText>
               <View style={[gs.flex1, {height: 0.5, backgroundColor: colors.secondaryAccent}]} />
             </View>
             <View style={[gs.minH55, gs.mt5]}>
@@ -350,7 +374,8 @@ const CategoryEntry: React.FC<CategoryEntryProps> = ({type, route}) => {
         onPress={handleAddFromDefaultOrAddCategory}
         colors={colors}
         buttonTitle={isAddButton ? t('common.add') : t('common.update')}
-        disabled={!isValid && selectedCategories.length === 0}
+        loading={saving}
+        disabled={saving || (!isValid && selectedCategories.length === 0)}
       />
     </PrimaryView>
   );
