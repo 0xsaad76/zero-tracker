@@ -49,6 +49,11 @@ export const upgradeExportData = (raw: RawExport): ExportData => {
     version = 6;
   }
 
+  if (version < 7) {
+    // An absent registry keeps the original four built-in investment types.
+    version = 7;
+  }
+
   if (__DEV__ && version < CURRENT_EXPORT_VERSION) {
     console.warn(`Export format v${version} is behind current v${CURRENT_EXPORT_VERSION}`);
   }

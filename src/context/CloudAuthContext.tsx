@@ -13,6 +13,7 @@ import {restoreBackupPreferences} from '../utils/backupPreferences';
 import {clearYearsCache} from '../utils/availableYearsCache';
 import {clearErrorLog} from '../utils/errorLog';
 import {useThemeColors} from './ThemeContext';
+import {clearInvestmentReminders} from '../investments/reminders';
 
 interface AuthContext {
   email: string;
@@ -207,12 +208,22 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
     dispatch({type: 'cloud/reset'});
     setLegacy(null);
     setStatus('loading');
+    let reminderCleanupWarning = '';
     try {
+      // Do not leave a previous account's device alarms behind after sign-out.
+      try {
+        await clearInvestmentReminders();
+      } catch {
+        // setCloudUser(null) retries on every signed-out startup. Do not trap
+        // the user in an account merely because the native reminder bridge failed.
+        reminderCleanupWarning = 'Signed out, but Android reminder cleanup will be retried when Zero opens again.';
+      }
       const {error: signOutError} = await supabase.auth.signOut({scope: 'local'});
       if (signOutError) throw signOutError;
       await GoogleSignin.signOut().catch(() => {});
       setSession(null);
       activeUser.current = null;
+      setError(reminderCleanupWarning);
       setStatus('login');
     } catch {
       // Local credentials survived: restore the matching data identity so
@@ -297,7 +308,8 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
           )
         : null}
       <Text style={[styles.footnote, {color: colors.secondaryText}]}>
-        Financial records stay in Supabase. Only your secure sign-in and display preferences are kept on this device.
+        Financial records stay in Supabase. Only your secure sign-in, display preferences, and anonymous reminder
+        schedule are kept on this device.
       </Text>
     </View>
   );

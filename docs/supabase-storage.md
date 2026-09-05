@@ -9,8 +9,9 @@ The public project URL, publishable key, and Google web OAuth client ID are in
 Google client secret to the mobile app. The Google client secret belongs in
 Supabase's Google provider configuration.
 
-Project: `wdsdcoumuawvfstyspbw`. Google provider and the `zero_cloud_records`
-migration were verified live. No paid branch, service, or billing change was made.
+Project: `wdsdcoumuawvfstyspbw`. Google provider plus the `zero_cloud_records`,
+`investment_records`, and `investment_record_validation` migrations were verified
+live. No paid branch, service, or billing change was made.
 
 Google native Android sign-in also needs an Android OAuth client for package
 `com.anotherwhy.zero` and the SHA-1 fingerprint of the key that signs the APK.
@@ -86,7 +87,11 @@ end-to-end login.
 - Both tables have owner-only RLS and no anonymous access. RPCs run as the
   caller, not as a privileged definer. Never use client-editable metadata to
   decide authorization.
-- `zero_read` returns an atomic snapshot, avoiding the default table row limit.
+- `zero_read_v3` returns the current atomic snapshot, including custom investment
+  types, while avoiding the default table row limit. Compatibility `zero_read_v2`
+  exposes only investments using the original four known types, and `zero_read`
+  hides all investment records. This prevents older builds from deleting records
+  their snapshot decoder does not understand.
   Concurrent reads are coalesced in RAM, not persisted. It reads the entire
   account, appropriate for the current personal tracker; server-side filtered
   reads may be needed for very large histories.
@@ -135,7 +140,9 @@ dropping live tables with user records.
 Run `npm run test:cloud-db`, `npm test -- --runInBand`, `npx tsc --noEmit`, and
 `npx eslint . --quiet`. The database tests use ephemeral Postgres (PGlite), not
 real user accounts. Live isolation/CAS tests were also run in a transaction and
-rolled back. Supabase's security advisor returned no findings.
+rolled back. Supabase's performance advisor returned no findings. Its security
+advisor only reports leaked-password protection as disabled; this app uses Google
+OAuth and does not offer password authentication.
 
 Android-device checks still required: real Google login/cancel, cold launch,
 save/edit/delete, offline retry, account switching, uninstall/reinstall restore,

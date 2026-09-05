@@ -56,11 +56,12 @@ class ZeroInvestmentReminders(context: ReactApplicationContext) :
   }
 }
 
+@Suppress("DEPRECATION")
 class InvestmentRemindersPackage : ReactPackage {
-  override fun createNativeModules(context: ReactApplicationContext): List<NativeModule> =
-      listOf(ZeroInvestmentReminders(context))
+  override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+      listOf(ZeroInvestmentReminders(reactContext))
 
-  override fun createViewManagers(context: ReactApplicationContext): List<ViewManager<*, *>> =
+  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
       emptyList()
 }
 
@@ -156,7 +157,17 @@ private object ReminderStore {
    * journal so interruption after a commit cannot make clear() lose old alarms. */
   fun replace(context: Context, incoming: List<Row>) {
     val old = cleanRetired(context, read(context))
+    val unchanged = old.rows.size == incoming.size && incoming.all { candidate ->
+      old.rows.any { current -> current.id == candidate.id && current.day == candidate.day &&
+          current.completedMonth == candidate.completedMonth && current.startMonth == candidate.startMonth }
+    }
+    if (unchanged) return
     val delivered = old.rows.associate { it.id to it.deliveredMonth }
+    val currentMonth = month(Calendar.getInstance())
+    val notificationsToCancel = old.rows.filter { previous ->
+      val replacement = incoming.find { it.id == previous.id }
+      replacement == null || replacement.completedMonth == currentMonth
+    }.map { it.id }
     val retired = JSONArray(old.rows.map {
       JSONObject().put("id", it.id).put("generation", old.generation)
     })
@@ -183,11 +194,10 @@ private object ReminderStore {
       throw error
     }
     cleanRetired(context, next)
-    // Also remove displayed reminders for reviewed/removed rows, including survivors
-    // of an interrupted cleanup. Do not cancel other app notifications.
+    // Keep unresolved reminders visible. Only a removed/disabled investment or a
+    // completed current-month valuation dismisses its displayed notification.
     val manager = notifications(context)
-    manager.activeNotifications.filter { it.tag?.startsWith(TAG_PREFIX) == true }
-        .forEach { manager.cancel(it.tag, it.id) }
+    notificationsToCancel.forEach { id -> manager.cancel(TAG_PREFIX + id, notificationId(id)) }
   }
 
   private fun cleanRetired(context: Context, state: State): State {
@@ -195,7 +205,6 @@ private object ReminderStore {
       val item = state.retired.getJSONObject(index)
       val id = item.getString("id")
       cancelAlarm(context, item.getString("generation"), id)
-      notifications(context).cancel(TAG_PREFIX + id, notificationId(id))
     }
     if (state.retired.length() == 0) return state
     return state.copy(retired = JSONArray()).also { write(context, it) }

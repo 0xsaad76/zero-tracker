@@ -8,7 +8,7 @@ This private-use Android fork of Zero uses Google sign-in and Supabase for finan
 - Overall and category-level weekly/monthly spending limits.
 - Home budget progress with optional thin category bars and a Settings visibility toggle.
 - Spending headers with weekday and date.
-- Investing and Trading placeholder tabs for later development.
+- Investment portfolios with optional user-managed types, contribution/withdrawal history, monthly valuations, Android reminders, and reports. Trading remains a placeholder.
 - Automatic cloud writes after each successful save; no separate backup button.
 - Explicit JSON restore/export and CSV export.
 - Light, dark, and system themes; locale and currency preferences.
@@ -34,13 +34,14 @@ For live preview, follow [Android emulator / phone steps](docs/ANDROID_PREVIEW.m
 
 See [cloud configuration and migration](docs/supabase-storage.md) for OAuth setup, privacy boundaries, concurrency, rollback, and current device-testing limitations. Public client identifiers live in `src/config/supabase.ts`; secrets must never go in the app.
 
-New installations never write financial records to SQLite. Existing installations explicitly confirm the account for a verified migration before the old device copy is removed. Google session credentials and display preferences are the only automatically persisted device state. Manual exports are user-requested local files.
+New installations never write financial records to SQLite. Existing installations explicitly confirm the account for a verified migration before the old device copy is removed. Google session credentials, display preferences, and anonymous reminder dates are the only automatically persisted device state. Manual exports are user-requested local files.
 
 Cloud persistence is not a backup against intentional deletion: deleting cloud records is permanent. Export JSON before destructive changes if you need a separate recoverable copy.
 
 ## Main code areas
 
 - `src/cloud/`: cloud transactions, domain services, JSON transfer, legacy migration.
+- `src/investments/`: investment validation, return calculations, cloud mutations, and Android reminder bridge.
 - `src/context/CloudAuthContext.tsx`: login, session lifecycle, migration gate.
 - `supabase/migrations/`: deployed SQL schema and owner-only security rules.
 - `src/screens/`, `src/components/`, `src/sheets/`: application UI.

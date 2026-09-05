@@ -1,7 +1,13 @@
 import {supabase} from './client';
 import type {CategoryData, ExpenseData, CurrencyData, DebtorData, DebtData, BudgetData} from '../watermelondb/services';
 import type {ExportData} from '../backend/export/format';
-import {investmentBackupSchema, type Investment} from '../investments/model';
+import {
+  investmentBackupSchema,
+  investmentTypeRegistrySchema,
+  type Investment,
+  type InvestmentTypeRegistry,
+} from '../investments/model';
+import {clearInvestmentReminders, syncInvestmentReminderData} from '../investments/reminders';
 
 export interface CloudData {
   users: {id: string; username: string; email: string}[];
@@ -14,9 +20,20 @@ export interface CloudData {
   preferences?: ExportData['preferences'];
   legacyImports?: string[];
   investments?: Investment[];
+  investmentTypeRegistry?: InvestmentTypeRegistry;
 }
-const collections = ['users', 'categories', 'expenses', 'currencies', 'debtors', 'debts', 'budgets', 'investments'] as const;
-type RecordKind = (typeof collections)[number] | 'settings';
+const collections = [
+  'users',
+  'categories',
+  'expenses',
+  'currencies',
+  'debtors',
+  'debts',
+  'budgets',
+  'investments',
+] as const;
+type RecordKind = (typeof collections)[number] | 'settings' | 'investment_types';
+const recognizedKinds: RecordKind[] = [...collections, 'settings', 'investment_types'];
 export interface CloudRecord {
   kind: RecordKind;
   id: string;
@@ -34,12 +51,19 @@ let pendingRead: {epoch: number; promise: Promise<Snapshot>} | null = null;
 const controllers = new Set<AbortController>();
 
 export function setCloudUser(userId: string | null) {
-  if (activeUserId === userId) return;
+  if (activeUserId === userId) {
+    // On a cold signed-out start activeUserId is already null, but persisted
+    // alarms from a previously killed process must still be removed.
+    if (userId === null) void clearInvestmentReminders().catch(() => {});
+    return;
+  }
   epoch++;
   activeUserId = userId;
   pendingRead = null;
   for (const controller of controllers) controller.abort();
   controllers.clear();
+  // Account switches must never retain the previous account's reminder IDs.
+  void clearInvestmentReminders().catch(() => {});
 }
 
 export function requireCloudUser(userId?: string): string {
@@ -97,8 +121,13 @@ export function decodeRecords(records: CloudRecord[]): CloudData {
     if (record.kind === 'settings') {
       result.preferences = record.data.preferences as CloudData['preferences'];
       result.legacyImports = record.data.legacyImports as string[] | undefined;
+    } else if (record.kind === 'investment_types') {
+      result.investmentTypeRegistry = investmentTypeRegistrySchema.parse({...record.data, id: record.id});
     } else if (record.kind === 'investments') {
-      result.investments!.push({...investmentBackupSchema.parse({...record.data, id: record.id}), userId: String(record.data.userId)});
+      result.investments!.push({
+        ...investmentBackupSchema.parse({...record.data, id: record.id}),
+        userId: String(record.data.userId),
+      });
     } else if (collections.includes(record.kind)) {
       // The record envelope is authoritative for the ID.
       (result[record.kind] as Record<string, unknown>[]).push({...record.data, id: record.id});
@@ -122,13 +151,17 @@ export function encodeRecords(data: CloudData): CloudRecord[] {
       },
     });
   }
+  if (data.investmentTypeRegistry) {
+    const registry = investmentTypeRegistrySchema.parse(data.investmentTypeRegistry);
+    records.push({kind: 'investment_types', id: 'registry', data: {...registry}});
+  }
   return records;
 }
 
 async function readSnapshot(owner: string, generation: number): Promise<Snapshot> {
   // Coalesce concurrent screen queries only, never persist a financial cache.
   if (pendingRead?.epoch === generation) return pendingRead.promise;
-  const promise = rpc<Snapshot>('zero_read_v2', {}, owner, generation);
+  const promise = rpc<Snapshot>('zero_read_v3', {}, owner, generation);
   pendingRead = {epoch: generation, promise};
   try {
     return await promise;
@@ -138,7 +171,12 @@ async function readSnapshot(owner: string, generation: number): Promise<Snapshot
 }
 
 export async function readCloudData(): Promise<CloudData> {
-  return decodeRecords((await readSnapshot(requireCloudUser(), epoch)).records);
+  const owner = requireCloudUser();
+  const generation = epoch;
+  const data = decodeRecords((await readSnapshot(owner, generation)).records);
+  assertSession(owner, generation);
+  void syncInvestmentReminderData(data.investments ?? []).catch(() => {});
+  return data;
 }
 
 export async function mutateCloudData<T>(mutation: (draft: CloudData) => T): Promise<T> {
@@ -156,8 +194,13 @@ export async function mutateCloudData<T>(mutation: (draft: CloudData) => T): Pro
       const original = new Map(before.records.map(r => [key(r), r]));
       const current = new Set(after.map(key));
       const upserts = after.filter(r => JSON.stringify(original.get(key(r))?.data) !== JSON.stringify(r.data));
-      const deletes = before.records.filter(r => (r.kind === 'settings' || collections.includes(r.kind)) && !current.has(key(r))).map(({kind, id}) => ({kind, id}));
-      if (!upserts.length && !deletes.length) return result;
+      const deletes = before.records
+        .filter(r => recognizedKinds.includes(r.kind) && !current.has(key(r)))
+        .map(({kind, id}) => ({kind, id}));
+      if (!upserts.length && !deletes.length) {
+        void syncInvestmentReminderData(draft.investments ?? []).catch(() => {});
+        return result;
+      }
       const saved = await rpc<boolean>(
         'zero_write',
         {expected_revision: before.revision, upserts, deletes},
@@ -165,7 +208,10 @@ export async function mutateCloudData<T>(mutation: (draft: CloudData) => T): Pro
         generation,
       );
       pendingRead = null;
-      if (saved) return result;
+      if (saved) {
+        void syncInvestmentReminderData(draft.investments ?? []).catch(() => {});
+        return result;
+      }
     }
     throw new Error('Your data changed on another device. Please try again.');
   };

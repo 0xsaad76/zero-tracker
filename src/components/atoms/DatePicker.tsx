@@ -18,6 +18,11 @@ interface DatePickerProps {
   maxDate?: Date;
 }
 
+const asLocalDate = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day, 12);
+};
+
 const DatePicker: React.FC<DatePickerProps> = React.memo(
   ({setShowDatePicker, createdAt, showDatePicker, setCreatedAt, label, minDate, maxDate}) => {
     const colors = useThemeColors();
@@ -55,25 +60,22 @@ const DatePicker: React.FC<DatePickerProps> = React.memo(
 
     return (
       <View style={gs.mb15}>
-        {label && <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>{label}</PrimaryText>}
+        {label && (
+          <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>
+            {label}
+          </PrimaryText>
+        )}
         <TouchableOpacity
           onPress={handleOpenDatePicker}
           activeOpacity={0.7}
-          style={[
-            gs.h48,
-            gs.rounded12,
-            gs.px14,
-            gs.rowCenter,
-            gs.gap8,
-            {backgroundColor: colors.secondaryAccent},
-          ]}>
+          style={[gs.h48, gs.rounded12, gs.px14, gs.rowCenter, gs.gap8, {backgroundColor: colors.secondaryAccent}]}>
           <Icon name="calendar" size={18} color={colors.secondaryText} />
           <PrimaryText size={14}>{formatDate(createdAt, 'Do MMM YYYY')}</PrimaryText>
         </TouchableOpacity>
 
         {Platform.OS === 'android' && showDatePicker && (
           <DateTimePicker
-            value={new Date(createdAt)}
+            value={asLocalDate(createdAt)}
             mode="date"
             is24Hour={false}
             display="default"

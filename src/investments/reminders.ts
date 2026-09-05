@@ -1,4 +1,5 @@
-import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
+import {NativeModules, PermissionsAndroid, Platform} from 'react-native';
+import {investmentSummary, localDate, type Investment} from './model';
 
 type ReminderRow = {
   id: string;
@@ -17,9 +18,7 @@ function nativeReminders(): ReminderModule {
   if (Platform.OS !== 'android') {
     throw new Error('Investment reminders are currently available only on Android.');
   }
-  const module = NativeModules.ZeroInvestmentReminders as
-    | ReminderModule
-    | undefined;
+  const module = NativeModules.ZeroInvestmentReminders as ReminderModule | undefined;
   if (
     !module ||
     typeof module.sync !== 'function' ||
@@ -49,7 +48,7 @@ function enqueue<T>(operation: () => Promise<T>): Promise<T> {
  * so later caller mutations cannot change an operation already in the queue. */
 export async function syncInvestmentReminders(rows: ReminderRow[]): Promise<void> {
   const json = JSON.stringify(
-    rows.map(({ id, day, completedMonth, startMonth }) => ({
+    rows.map(({id, day, completedMonth, startMonth}) => ({
       id,
       day,
       completedMonth,
@@ -82,4 +81,29 @@ export async function requestInvestmentReminderPermission(): Promise<boolean> {
 export function investmentRemindersEnabled(): Promise<boolean> {
   if (Platform.OS !== 'android') return Promise.resolve(false);
   return enqueue(() => nativeReminders().isEnabled());
+}
+
+/** Convert cloud records to the deliberately minimal native schedule format. */
+export function syncInvestmentReminderData(investments: Investment[]): Promise<void> {
+  return syncInvestmentReminders(investmentReminderRows(investments));
+}
+
+export function investmentReminderRows(investments: Investment[]): ReminderRow[] {
+  const today = localDate();
+  const month = today.slice(0, 7);
+  const rows = investments
+    .filter(item => item.reminderEnabled)
+    .map(item => {
+      const summary = investmentSummary(item, month, today);
+      return {
+        id: item.id,
+        day: item.reviewDay,
+        completedMonth: summary.closing && !summary.stale ? month : '',
+        startMonth: item.startDate.slice(0, 7),
+      };
+    });
+  if (rows.length > 100) {
+    throw new Error('At most 100 investment reminders can be enabled on this device.');
+  }
+  return rows;
 }

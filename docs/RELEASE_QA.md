@@ -48,16 +48,17 @@ cd android && ./gradlew assembleDebug --console=plain
 - [ ] Sunday/Monday week-start choice is respected.
 - [ ] Home progress visibility, theme, and locale reload from the cloud account.
 - [ ] Spending group labels show weekday and date.
-- [ ] Investing and Trading tabs remain placeholders.
+- [ ] Investment type add/rename/delete, No type, investment CRUD, contributions, withdrawals, monthly valuations, due badges, reminders, and reports work; Trading remains a placeholder.
 - [ ] Reports, backdated entries, large fonts, and accessibility labels are usable.
 
 ## Current evidence and remaining gate
 
-September 4, 2026: TypeScript and ESLint checks passed; Jest passed 264 tests
-across 23 suites; Bun's overlapping pure-logic subset passed 217 tests. The
-database harness passed owner isolation, anonymous denial, conflict detection,
-atomic rollback, deletion scope, and restoration beyond 1,000 records. A
-production-mode Android JavaScript bundle with assets built successfully.
+September 5, 2026: strict TypeScript and ESLint checks passed; Jest passed 292
+tests across 26 suites. The database harness passed investment compatibility
+and nested validation, owner isolation, anonymous denial, conflict detection,
+atomic rollback, deletion scope, and restoration beyond 1,000 records. The
+x86_64 Android debug APK built, installed, bundled from Metro, and reloaded
+without a fatal JavaScript or Android runtime error.
 
 See [cloud storage notes](supabase-storage.md) for automated and live database checks.
 The SDK license blocker was resolved with the owner's authorization on September

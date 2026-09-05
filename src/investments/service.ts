@@ -1,22 +1,86 @@
 import {nanoid} from 'nanoid';
 import {mutateCloudData, requireCloudUser} from '../cloud/records';
-import {investmentBackupSchema, localDate, type Investment, type InvestmentFlow, type MonthlyValuation} from './model';
+import {
+  investmentBackupSchema,
+  investmentTypeRegistrySchema,
+  investmentTypeSchema,
+  localDate,
+  resolveInvestmentTypes,
+  type Investment,
+  type InvestmentFlow,
+  type InvestmentTypeRegistry,
+  type MonthlyValuation,
+} from './model';
 
-export async function saveInvestment(input: Pick<Investment, 'name' | 'type' | 'startDate' | 'reviewDay' | 'reminderEnabled'>, id?: string) {
+const materializeTypeRegistry = (registry: InvestmentTypeRegistry | undefined, owner: string): InvestmentTypeRegistry =>
+  investmentTypeRegistrySchema.parse({id: 'registry', userId: owner, items: resolveInvestmentTypes(registry)});
+
+export async function saveInvestment(
+  input: Pick<Investment, 'name' | 'type' | 'startDate' | 'reviewDay' | 'reminderEnabled'>,
+  id?: string,
+) {
   const owner = requireCloudUser();
   const key = id ?? nanoid(24);
   await mutateCloudData(draft => {
     requireCloudUser(owner);
-    const items = draft.investments ??= [];
+    const types = resolveInvestmentTypes(draft.investmentTypeRegistry);
+    if (input.type && !types.some(type => type.id === input.type)) {
+      throw new Error('That investment type no longer exists. Choose another type or No type.');
+    }
+    const items = (draft.investments ??= []);
     const existing = items.find(i => i.id === key);
     if (id && !existing) throw new Error('This investment was removed. Refresh and try again.');
-    const item = investmentBackupSchema.parse({...existing, ...input, id: key, flows: existing?.flows ?? [], valuations: existing?.valuations ?? []});
+    const item = investmentBackupSchema.parse({
+      ...existing,
+      ...input,
+      id: key,
+      flows: existing?.flows ?? [],
+      valuations: existing?.valuations ?? [],
+    });
     if (item.startDate > localDate()) throw new Error('Start date cannot be in the future.');
     const record = {...item, userId: owner};
     if (existing) items[items.indexOf(existing)] = record;
     else items.push(record);
   });
   return key;
+}
+
+export async function saveInvestmentType(name: string, id?: string) {
+  const owner = requireCloudUser();
+  const key = id ?? nanoid(24);
+  return mutateCloudData(draft => {
+    requireCloudUser(owner);
+    const registry = materializeTypeRegistry(draft.investmentTypeRegistry, owner);
+    const candidate = investmentTypeSchema.parse({id: key, name});
+    const existing = registry.items.find(type => type.id === key);
+    if (id && !existing) throw new Error('This investment type was removed. Refresh and try again.');
+    if (registry.items.some(type => type.id !== key && type.name.toLowerCase() === candidate.name.toLowerCase())) {
+      throw new Error('An investment type with this name already exists.');
+    }
+    if (existing) registry.items[registry.items.indexOf(existing)] = candidate;
+    else {
+      if (registry.items.length >= 100) throw new Error('You can keep up to 100 investment types.');
+      registry.items.push(candidate);
+    }
+    draft.investmentTypeRegistry = investmentTypeRegistrySchema.parse(registry);
+    return key;
+  });
+}
+
+export async function deleteInvestmentType(id: string) {
+  const owner = requireCloudUser();
+  await mutateCloudData(draft => {
+    requireCloudUser(owner);
+    const registry = materializeTypeRegistry(draft.investmentTypeRegistry, owner);
+    if (!registry.items.some(type => type.id === id)) {
+      throw new Error('This investment type was already removed.');
+    }
+    registry.items = registry.items.filter(type => type.id !== id);
+    draft.investmentTypeRegistry = investmentTypeRegistrySchema.parse(registry);
+    for (const investment of draft.investments ?? []) {
+      if (investment.type === id) investment.type = null;
+    }
+  });
 }
 export async function deleteInvestment(id: string) {
   const owner = requireCloudUser();

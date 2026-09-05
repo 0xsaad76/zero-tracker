@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {investmentBackupSchema} from '../../investments/model';
+import {defaultInvestmentTypes, investmentBackupSchema, investmentTypeSchema} from '../../investments/model';
 
 const userSchema = z.object({
   username: z.string(),
@@ -50,24 +50,50 @@ const budgetSchema = z.object({
   category: z.object({name: z.string()}).optional(),
 });
 
-const exportDataSchema = z.object({
-  users: z.array(userSchema).min(1),
-  categories: z.array(categorySchema),
-  expenses: z.array(expenseSchema),
-  currencies: z.array(currencySchema),
-  debtors: z.array(debtorSchema),
-  debts: z.array(debtSchema),
-  budgets: z.array(budgetSchema).default([]),
-  investments: z.array(investmentBackupSchema).optional(),
-  preferences: z
-    .object({
-      theme: z.enum(['system', 'light', 'dark']),
-      locale: z.string().nullable(),
-      weekStart: z.enum(['sunday', 'monday']),
-      showBudgetProgress: z.boolean(),
-    })
-    .optional(),
-});
+const investmentTypesSchema = z
+  .array(investmentTypeSchema)
+  .max(100)
+  .superRefine((types, ctx) => {
+    if (new Set(types.map(type => type.id)).size !== types.length) {
+      ctx.addIssue({code: 'custom', message: 'Investment type IDs must be unique.'});
+    }
+    if (new Set(types.map(type => type.name.toLowerCase())).size !== types.length) {
+      ctx.addIssue({code: 'custom', message: 'Investment type names must be unique.'});
+    }
+  });
+
+const exportDataSchema = z
+  .object({
+    users: z.array(userSchema).min(1),
+    categories: z.array(categorySchema),
+    expenses: z.array(expenseSchema),
+    currencies: z.array(currencySchema),
+    debtors: z.array(debtorSchema),
+    debts: z.array(debtSchema),
+    budgets: z.array(budgetSchema).default([]),
+    investments: z.array(investmentBackupSchema).optional(),
+    investmentTypes: investmentTypesSchema.optional(),
+    preferences: z
+      .object({
+        theme: z.enum(['system', 'light', 'dark']),
+        locale: z.string().nullable(),
+        weekStart: z.enum(['sunday', 'monday']),
+        showBudgetProgress: z.boolean(),
+      })
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    const typeIds = new Set((data.investmentTypes ?? defaultInvestmentTypes).map(type => type.id));
+    data.investments?.forEach((investment, index) => {
+      if (investment.type && !typeIds.has(investment.type)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['investments', index, 'type'],
+          message: 'Investment type is missing from investmentTypes.',
+        });
+      }
+    });
+  });
 
 const exportEnvelopeSchema = z.object({
   key: z.string(),

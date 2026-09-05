@@ -4,6 +4,7 @@ import type {ExportData} from '../backend/export/format';
 import type {ImportResult} from '../watermelondb/services/importService';
 import {mutateCloudData, readCloudData, requireCloudUser, type CloudData} from './records';
 import {getBackupPreferences, restoreBackupPreferences} from '../utils/backupPreferences';
+import {investmentBackupSchema, investmentTypeRegistrySchema, resolveInvestmentTypes} from '../investments/model';
 
 export async function getAllData(): Promise<ExportData> {
   const d = await readCloudData();
@@ -36,11 +37,15 @@ export async function getAllData(): Promise<ExportData> {
     })),
     preferences: d.preferences ?? getBackupPreferences(),
     investments: (d.investments ?? []).map(({userId: _owner, ...investment}) => investment),
+    investmentTypes: resolveInvestmentTypes(d.investmentTypeRegistry),
   };
 }
 
 export async function importAllData(data: ExportData): Promise<ImportResult> {
   const userId = requireCloudUser();
+  if ((data.investments ?? []).filter(investment => investment.reminderEnabled).length > 100) {
+    throw new Error('This backup has more than 100 enabled investment reminders. Disable some before importing.');
+  }
   const plan = buildImportPlan(data);
   const categories = plan.categories.map(c => ({
     id: nanoid(24),
@@ -62,7 +67,9 @@ export async function importAllData(data: ExportData): Promise<ImportResult> {
   const categoryId = (name: string) => categories.find(c => c.name === name)!.id;
   const debtorId = (title: string) => debtors.find(d => d.title === title)!.id;
   const imported: Omit<CloudData, 'users'> = {
-    ...(data.investments ? {investments: data.investments.map(i => ({...i, id: nanoid(24), userId}))} : {}),
+    ...(data.investments
+      ? {investments: data.investments.map(i => ({...investmentBackupSchema.parse(i), id: nanoid(24), userId}))}
+      : {}),
     categories,
     debtors,
     currencies: plan.currencies.slice(0, 1).map(c => ({...c, id: userId, userId})),
@@ -93,6 +100,15 @@ export async function importAllData(data: ExportData): Promise<ImportResult> {
       categoryId: b.categoryName ? categoryId(b.categoryName) : '',
     })),
     ...(data.preferences ? {preferences: data.preferences} : {}),
+    ...(data.investmentTypes !== undefined
+      ? {
+          investmentTypeRegistry: investmentTypeRegistrySchema.parse({
+            id: 'registry',
+            userId,
+            items: data.investmentTypes,
+          }),
+        }
+      : {}),
   };
   // Backup restore is one server transaction. Authentication identity never comes from a file.
   await mutateCloudData(draft => {
@@ -111,6 +127,7 @@ export async function deleteAllData(): Promise<void> {
     draft.budgets = [];
     draft.currencies = [];
     draft.investments = [];
+    draft.investmentTypeRegistry = undefined;
     // Retain Google identity and migration receipts; deleting data is not deleting the account.
   });
 }

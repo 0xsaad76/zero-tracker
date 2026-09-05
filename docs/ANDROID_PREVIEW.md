@@ -102,7 +102,7 @@ daemon memory; do not do this while a build is running.
 
 - Login, add/edit spending, and restart the app to verify confirmed saves.
 - Weekly/monthly limits, category progress, hide/show setting, and full dates.
-- Investing and Trading are intentionally placeholder pages.
+- Investing: add/edit/delete investment types (including detaching a type in use), create an investment with No type, and add/edit/delete an investment, contribution, withdrawal, and monthly valuation; verify due badges, reminder permission, month navigation, and portfolio/per-investment reports. Trading remains a placeholder.
 - Sign-out and sign-in again should restore the same cloud data.
 - Reinstall recovery is a separate destructive test: only do it after confirming
   the data exists in the cloud, ideally with a manual JSON export. Signing back

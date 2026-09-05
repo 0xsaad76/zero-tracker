@@ -11,6 +11,14 @@ import {
 } from '../src/cloud/records';
 import {createExpense, updateExpenseById, deleteDebtorById, getAllExpensesByMonth} from '../src/cloud/domain';
 import {upsertBudget} from '../src/cloud/budgets';
+import {
+  deleteInvestment,
+  deleteInvestmentEntry,
+  deleteInvestmentType,
+  saveInvestment,
+  saveInvestmentEntry,
+  saveInvestmentType,
+} from '../src/investments/service';
 
 jest.mock('../src/cloud/client', () => ({supabase: {auth: {getSession: jest.fn()}, rpc: jest.fn()}}));
 let remote: {revision: number; records: CloudRecord[]};
@@ -41,7 +49,7 @@ beforeEach(async () => {
         call.token = value;
         return {
           abortSignal: async () => {
-            if (name === 'zero_read_v2') return {data: clone(remote), error: null};
+            if (name === 'zero_read_v3') return {data: clone(remote), error: null};
             if (failWrite) return {data: null, error: {message: 'offline'}};
             if (conflict) {
               conflict = false;
@@ -185,4 +193,63 @@ it('keeps recurring budget start dates and atomically removes overrides', async 
   expect(decodeRecords(remote.records).budgets).toEqual([
     {id, userId: 'account-a', categoryId: '', amount: 200, month: 'recurring:2026-08', budgetType: 'monthly'},
   ]);
+});
+
+it('creates, updates, and deletes cloud investment history atomically', async () => {
+  const id = await saveInvestment({
+    name: 'Index fund',
+    type: 'mutual_fund',
+    startDate: '2020-01-01',
+    reviewDay: 15,
+    reminderEnabled: false,
+  });
+  await saveInvestmentEntry(id, {
+    id: 'deposit',
+    date: '2020-01-02',
+    type: 'contribution',
+    amount: 100,
+  });
+  await saveInvestmentEntry(id, {month: '2020-01', date: '2020-01-15', value: 110});
+  expect(decodeRecords(remote.records).investments?.[0]).toMatchObject({
+    id,
+    userId: 'account-a',
+    name: 'Index fund',
+    flows: [{id: 'deposit', amount: 100}],
+    valuations: [{month: '2020-01', value: 110}],
+  });
+  await deleteInvestmentEntry(id, 'deposit', false);
+  expect(decodeRecords(remote.records).investments?.[0].flows).toEqual([]);
+  await deleteInvestment(id);
+  expect(decodeRecords(remote.records).investments).toEqual([]);
+});
+
+it('adds, renames, and removes investment types without deleting investments', async () => {
+  const typeId = await saveInvestmentType('Fixed deposit');
+  const investmentId = await saveInvestment({
+    name: 'Bank FD',
+    type: typeId,
+    startDate: '2020-01-01',
+    reviewDay: 15,
+    reminderEnabled: false,
+  });
+  await saveInvestmentType('Term deposit', typeId);
+  expect(decodeRecords(remote.records).investmentTypeRegistry?.items.find(type => type.id === typeId)?.name).toBe(
+    'Term deposit',
+  );
+
+  await deleteInvestmentType(typeId);
+  const data = decodeRecords(remote.records);
+  expect(data.investmentTypeRegistry?.items.some(type => type.id === typeId)).toBe(false);
+  expect(data.investments?.find(investment => investment.id === investmentId)?.type).toBeNull();
+});
+
+it('accepts an investment with no type', async () => {
+  const id = await saveInvestment({
+    name: 'Untyped asset',
+    type: null,
+    startDate: '2020-01-01',
+    reviewDay: 1,
+    reminderEnabled: false,
+  });
+  expect(decodeRecords(remote.records).investments?.find(investment => investment.id === id)?.type).toBeNull();
 });
