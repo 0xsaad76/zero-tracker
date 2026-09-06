@@ -103,7 +103,13 @@ beforeEach(async () => {
 
 describe('importAllData', () => {
   it('round-trips weekly/category limits and display preferences', async () => {
-    const preferences = {theme: 'dark', locale: 'en', weekStart: 'monday', showBudgetProgress: false} as const;
+    const preferences = {
+      theme: 'dark',
+      locale: 'en',
+      weekStart: 'monday',
+      showBudgetProgress: false,
+      tradingCurrency: 'USD',
+    } as const;
     await importAllData(backup({preferences}));
     const exported = await getAllData();
     expect(exported?.budgets).toEqual(backup().budgets);
@@ -111,6 +117,19 @@ describe('importAllData', () => {
     expect(getBackupPreferences()).toEqual(preferences);
     await importAllData(exported!);
     expect((await getAllData())?.budgets).toEqual(exported?.budgets);
+  });
+
+  it('round-trips the trading currency preference', async () => {
+    const preferences = {
+      theme: 'dark',
+      locale: 'en',
+      weekStart: 'monday',
+      showBudgetProgress: false,
+      tradingCurrency: 'INR',
+    } as const;
+    await importAllData(backup({preferences}));
+    expect(getBackupPreferences()).toEqual(preferences);
+    expect((await getAllData())?.preferences).toEqual(preferences);
   });
 
   it('keeps overall, category, weekly and monthly limits independent', async () => {

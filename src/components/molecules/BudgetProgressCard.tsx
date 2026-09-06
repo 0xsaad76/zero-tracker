@@ -3,14 +3,12 @@ import {ScrollView, StyleSheet, TouchableOpacity, View} from 'react-native';
 import {useTranslation} from 'react-i18next';
 import PrimaryText from '../atoms/PrimaryText';
 import Icon from '../atoms/Icons';
-import DailyBudgetRow from '../atoms/DailyBudgetRow';
 import useThemeColors from '../../hooks/useThemeColors';
 import useFormatAmount from '../../hooks/useFormatAmount';
 import {navigate} from '../../utils/navigationUtils';
 import {findBudget} from '../../redux/slice/budgetDataSlice';
 import type {BudgetData, BudgetPeriod} from '../../cloud/budgets';
 import type {CategoryData, ExpenseWithCategory} from '../../cloud';
-import {computeDailyAllowance} from '../../utils/budgetMath';
 import {sumAmounts, sumAmountsByCategory} from '../../utils/budgetTracking';
 import {gs} from '../../styles/globalStyles';
 import {formatDate} from '../../utils/dateUtils';
@@ -37,9 +35,6 @@ const BudgetProgressCard: React.FC<BudgetProgressCardProps> = ({
   weeklyExpenses,
   budgets,
   categories,
-  todayTotal,
-  daysInMonth,
-  isCurrentMonth,
   weekRange,
   weeklyReady,
   monthlyReady,
@@ -81,13 +76,6 @@ const BudgetProgressCard: React.FC<BudgetProgressCardProps> = ({
   const exceeded = overallBudget ? spent > overallBudget.amount : false;
   const ready = period === 'monthly' ? monthlyReady : weeklyReady;
   const error = period === 'monthly' ? monthlyError : weeklyError;
-  const {allowance: dailyBudget} = computeDailyAllowance({
-    monthlyBudget: period === 'monthly' ? (overallBudget?.amount ?? 0) : 0,
-    spentBeforeToday: spent - todayTotal,
-    dayOfMonth: new Date().getDate(),
-    daysInMonth,
-    isCurrentMonth,
-  });
 
   return (
     <View style={[gs.px14, gs.py10, gs.rounded12, gs.mt6, {backgroundColor: colors.secondaryAccent}]}>
@@ -163,18 +151,6 @@ const BudgetProgressCard: React.FC<BudgetProgressCardProps> = ({
           <PrimaryText size={10} variant="number" color={colors.secondaryText} style={gs.mt4}>
             {t('limits.spentOf', {spent: formatAmount(spent), limit: formatAmount(overallBudget.amount)})}
           </PrimaryText>
-          {period === 'monthly' ? (
-            <View style={gs.mt6}>
-              <DailyBudgetRow
-                dailyBudget={dailyBudget}
-                dailyLeft={dailyBudget - todayTotal}
-                isCurrentMonth={isCurrentMonth}
-                colors={colors}
-                formatAmount={formatAmount}
-                t={t}
-              />
-            </View>
-          ) : null}
         </View>
       ) : (
         <TouchableOpacity onPress={() => navigate('SpendingLimitsScreen')} style={gs.mt10}>

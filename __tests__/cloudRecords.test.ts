@@ -1,5 +1,6 @@
 import {supabase} from '../src/cloud/client';
 import {
+  cloudProtocolVersion,
   decodeRecords,
   encodeRecords,
   emptyCloudData,
@@ -19,6 +20,15 @@ import {
   saveInvestmentEntry,
   saveInvestmentType,
 } from '../src/investments/service';
+import {
+  deleteTrade,
+  deleteTradingPair,
+  deleteTradingStrategy,
+  saveOpeningBalance,
+  saveTrade,
+  saveTradingPair,
+  saveTradingStrategy,
+} from '../src/trading/service';
 
 jest.mock('../src/cloud/client', () => ({supabase: {auth: {getSession: jest.fn()}, rpc: jest.fn()}}));
 let remote: {revision: number; records: CloudRecord[]};
@@ -49,7 +59,7 @@ beforeEach(async () => {
         call.token = value;
         return {
           abortSignal: async () => {
-            if (name === 'zero_read_v3') return {data: clone(remote), error: null};
+            if (name === 'zero_read_v4' || name === 'zero_read_v3') return {data: clone(remote), error: null};
             if (failWrite) return {data: null, error: {message: 'offline'}};
             if (conflict) {
               conflict = false;
@@ -97,6 +107,11 @@ it('saves each record remotely and binds the request to the original token', asy
   });
   expect(calls.every(c => c.token === 'Bearer token-a')).toBe(true);
   expect(calls.find(c => c.name === 'zero_write')!.args.upserts as CloudRecord[]).toHaveLength(1);
+});
+it('reuses a just-fetched snapshot for startup readers without persisting it', async () => {
+  await readCloudData();
+  await readCloudData();
+  expect(calls.filter(call => call.name.startsWith('zero_read'))).toHaveLength(1);
 });
 it('updates existing amounts instead of mutating the comparison baseline', async () => {
   const id = await createExpense('account-a', 'Lunch', 50, '', 'food', '2026-09-04');
@@ -252,4 +267,110 @@ it('accepts an investment with no type', async () => {
     reminderEnabled: false,
   });
   expect(decodeRecords(remote.records).investments?.find(investment => investment.id === id)?.type).toBeNull();
+});
+
+it('creates, updates, and deletes cloud trades atomically', async () => {
+  const id = await saveTrade({
+    pair: 'btc',
+    direction: 'long',
+    leverage: 10,
+    avgPrice: 67250.5,
+    date: '2020-01-01',
+    riskReward: 2,
+    strategy: 'sfp',
+    reason: 'Sweep with displacement.',
+    pnl: 250,
+  });
+  expect(decodeRecords(remote.records).trades?.[0]).toMatchObject({id, userId: 'account-a', pnl: 250});
+  await saveTrade(
+    {
+      pair: 'eth',
+      direction: 'short',
+      leverage: 5,
+      avgPrice: 3500,
+      date: '2020-01-02',
+      riskReward: 3,
+      strategy: 'trendline',
+      reason: 'Break and retest.',
+      pnl: -100,
+    },
+    id,
+  );
+  expect(decodeRecords(remote.records).trades?.[0]).toMatchObject({pair: 'eth', pnl: -100});
+  await deleteTrade(id);
+  expect(decodeRecords(remote.records).trades).toEqual([]);
+});
+
+it('adds, renames, and guards trading strategies and pairs in use', async () => {
+  const strategyId = await saveTradingStrategy('Breakout');
+  const pairId = await saveTradingPair('SOL');
+  const tradeId = await saveTrade({
+    pair: pairId,
+    direction: 'long',
+    leverage: 5,
+    avgPrice: 150.25,
+    date: '2020-01-01',
+    riskReward: 2,
+    strategy: strategyId,
+    reason: 'Range break.',
+    pnl: 50,
+  });
+  await saveTradingStrategy('Range breakout', strategyId);
+  expect(
+    decodeRecords(remote.records).tradingStrategyRegistry?.items.find(strategy => strategy.id === strategyId)?.name,
+  ).toBe('Range breakout');
+  await expect(deleteTradingStrategy(strategyId)).rejects.toThrow('still use');
+  await expect(deleteTradingPair(pairId)).rejects.toThrow('still use');
+  await deleteTrade(tradeId);
+  await deleteTradingStrategy(strategyId);
+  await deleteTradingPair(pairId);
+  expect(decodeRecords(remote.records).trades).toEqual([]);
+});
+
+it('stores monthly opening balances', async () => {
+  await saveOpeningBalance('2026-09', 1000);
+  expect(decodeRecords(remote.records).tradingBalanceRegistry?.items).toEqual([
+    {month: '2026-09', openingBalance: 1000},
+  ]);
+  await saveOpeningBalance('2026-09', 1200);
+  expect(decodeRecords(remote.records).tradingBalanceRegistry?.items).toEqual([
+    {month: '2026-09', openingBalance: 1200},
+  ]);
+});
+
+const missingFunctionOnce = () =>
+  rpc.mockImplementationOnce((() => ({
+    setHeader: () => ({
+      abortSignal: async () => ({
+        data: null,
+        error: {message: 'Could not find the function public.zero_read_v4 in the schema cache', code: 'PGRST202'},
+      }),
+    }),
+  })) as never);
+
+it('falls back to older reads when the server lacks the newest function', async () => {
+  missingFunctionOnce();
+  const data = await readCloudData();
+  expect(cloudProtocolVersion()).toBe(3);
+  expect(data.trades).toEqual([]);
+  const id = await createExpense('account-a', 'Lunch', 50, '', 'food', '2026-09-04');
+  expect(decodeRecords(remote.records).expenses.map(expense => expense.id)).toContain(id);
+});
+
+it('blocks trading writes with a clear error while the cloud lacks v4', async () => {
+  missingFunctionOnce();
+  await readCloudData();
+  await expect(
+    saveTrade({
+      pair: 'btc',
+      direction: 'long',
+      leverage: 10,
+      avgPrice: 67250.5,
+      date: '2020-01-01',
+      riskReward: 2,
+      strategy: 'sfp',
+      reason: 'Sweep with displacement.',
+      pnl: 250,
+    }),
+  ).rejects.toThrow('cloud update');
 });

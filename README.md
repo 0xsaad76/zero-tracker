@@ -8,7 +8,7 @@ This private-use Android fork of Zero uses Google sign-in and Supabase for finan
 - Overall and category-level weekly/monthly spending limits.
 - Home budget progress with optional thin category bars and a Settings visibility toggle.
 - Spending headers with weekday and date.
-- Investment portfolios with optional user-managed types, contribution/withdrawal history, monthly valuations, Android reminders, and reports. Trading remains a placeholder.
+- Investment portfolios with optional user-managed types, contribution/withdrawal history, monthly valuations, Android reminders, and reports. Trading journal with pairs, strategies, leverage, risk/reward, monthly balances, filters, and reports.
 - Automatic cloud writes after each successful save; no separate backup button.
 - Explicit JSON restore/export and CSV export.
 - Light, dark, and system themes; locale and currency preferences.

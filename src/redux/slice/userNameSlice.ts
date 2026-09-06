@@ -1,6 +1,6 @@
 import {createSlice, type PayloadAction} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
-import {fetchUserData} from './userIdSlice';
+import {fetchUserData, hydrateUserData} from './userIdSlice';
 
 const initialState = {
   userName: '',
@@ -15,9 +15,13 @@ const userNameSlice = createSlice({
     },
   },
   extraReducers: builder => {
-    builder.addCase(fetchUserData.fulfilled, (state, action) => {
-      state.userName = action.payload.userName;
-    });
+    builder
+      .addCase(fetchUserData.fulfilled, (state, action) => {
+        state.userName = action.payload.userName;
+      })
+      .addCase(hydrateUserData, (state, action) => {
+        state.userName = action.payload.userName;
+      });
   },
 });
 

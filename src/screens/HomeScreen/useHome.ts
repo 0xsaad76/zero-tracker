@@ -99,8 +99,10 @@ const useHome = () => {
   );
 
   useEffect(() => {
-    dispatch(fetchUserData());
-  }, [dispatch]);
+    // Auth bootstrap already hydrates this from its cloud snapshot. Keep this
+    // fallback for onboarding/legacy routes that can mount without it.
+    if (!userId) dispatch(fetchUserData());
+  }, [dispatch, userId]);
 
   useEffect(() => {
     if (userId) {

@@ -13,6 +13,7 @@ import {getAllUsers} from '../src/cloud';
 import rootReducer from '../src/redux/rootReducer';
 import type {Session} from '@supabase/supabase-js';
 import {setUserName} from '../src/redux/slice/userNameSlice';
+import StorageService from '../src/utils/asyncStorageService';
 
 jest.mock('../src/cloud/client', () => ({
   supabase: {
@@ -95,6 +96,7 @@ const press = async (label: string) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  StorageService.clearSync();
   identity = null;
   data = {
     users: [{id: 'account-a', username: 'Person', email: 'person@example.test'}],
@@ -158,6 +160,20 @@ it('restores an existing secure session without repeating Google signup', async 
   expect(output()).toContain('PRIVATE HOME');
   expect(GoogleSignin.signIn).not.toHaveBeenCalled();
 });
+it('silently rebuilds a missing Supabase session from the saved Google account', async () => {
+  StorageService.setBoolean('cloudSessionExpected', true);
+  jest.mocked(GoogleSignin.signInSilently).mockResolvedValue({
+    type: 'success',
+    data: {idToken: 'silent-google-token'},
+  } as never);
+  jest.mocked(supabase.auth.signInWithIdToken).mockResolvedValue({
+    data: {user: session.user, session},
+    error: null,
+  } as never);
+  await render();
+  expect(supabase.auth.signInWithIdToken).toHaveBeenCalledWith({provider: 'google', token: 'silent-google-token'});
+  expect(output()).toContain('PRIVATE HOME');
+});
 it.each([
   ['10', 'not configured for this Android build (code 10)'],
   [10, 'not configured for this Android build (code 10)'],
@@ -218,6 +234,18 @@ it('keeps private screens hidden on offline bootstrap and recovers on retry', as
   await press('Try again');
   expect(output()).toContain('PRIVATE HOME');
 });
+it('reasserts the restored account identity before retrying bootstrap', async () => {
+  jest.mocked(supabase.auth.getSession).mockResolvedValue({data: {session}, error: null});
+  jest.mocked(readCloudData).mockImplementationOnce(async () => {
+    setCloudUser(null);
+    throw new Error('Please sign in to access your account.');
+  });
+  await render();
+  expect(output()).toContain('Please sign in to access your account.');
+  await press('Try again');
+  expect(identity).toBe('account-a');
+  expect(output()).toContain('PRIVATE HOME');
+});
 it('clears private screens on sign-out without deleting cloud data', async () => {
   jest.mocked(supabase.auth.getSession).mockResolvedValue({data: {session}, error: null});
   await render();
@@ -226,6 +254,7 @@ it('clears private screens on sign-out without deleting cloud data', async () =>
   expect(output()).not.toContain('PRIVATE HOME');
   expect(identity).toBeNull();
   expect(mutateCloudData).not.toHaveBeenCalled();
+  expect(StorageService.getBoolean('cloudSessionExpected')).toBe(false);
 });
 it('a failed sign-out can retry bootstrap using its surviving session', async () => {
   jest.mocked(supabase.auth.getSession).mockResolvedValue({data: {session}, error: null});

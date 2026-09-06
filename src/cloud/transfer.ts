@@ -5,6 +5,14 @@ import type {ImportResult} from '../watermelondb/services/importService';
 import {mutateCloudData, readCloudData, requireCloudUser, type CloudData} from './records';
 import {getBackupPreferences, restoreBackupPreferences} from '../utils/backupPreferences';
 import {investmentBackupSchema, investmentTypeRegistrySchema, resolveInvestmentTypes} from '../investments/model';
+import {
+  resolveTradingPairs,
+  resolveTradingStrategies,
+  tradeBackupSchema,
+  tradingBalanceRegistrySchema,
+  tradingPairRegistrySchema,
+  tradingStrategyRegistrySchema,
+} from '../trading/model';
 
 export async function getAllData(): Promise<ExportData> {
   const d = await readCloudData();
@@ -38,6 +46,10 @@ export async function getAllData(): Promise<ExportData> {
     preferences: d.preferences ?? getBackupPreferences(),
     investments: (d.investments ?? []).map(({userId: _owner, ...investment}) => investment),
     investmentTypes: resolveInvestmentTypes(d.investmentTypeRegistry),
+    trades: (d.trades ?? []).map(({userId: _owner, ...trade}) => trade),
+    tradingStrategies: resolveTradingStrategies(d.tradingStrategyRegistry),
+    tradingPairs: resolveTradingPairs(d.tradingPairRegistry),
+    tradingBalances: (d.tradingBalanceRegistry?.items ?? []).map(item => ({...item})),
   };
 }
 
@@ -70,6 +82,7 @@ export async function importAllData(data: ExportData): Promise<ImportResult> {
     ...(data.investments
       ? {investments: data.investments.map(i => ({...investmentBackupSchema.parse(i), id: nanoid(24), userId}))}
       : {}),
+    ...(data.trades ? {trades: data.trades.map(t => ({...tradeBackupSchema.parse(t), id: nanoid(24), userId}))} : {}),
     categories,
     debtors,
     currencies: plan.currencies.slice(0, 1).map(c => ({...c, id: userId, userId})),
@@ -109,6 +122,33 @@ export async function importAllData(data: ExportData): Promise<ImportResult> {
           }),
         }
       : {}),
+    ...(data.tradingStrategies !== undefined
+      ? {
+          tradingStrategyRegistry: tradingStrategyRegistrySchema.parse({
+            id: 'registry',
+            userId,
+            items: data.tradingStrategies,
+          }),
+        }
+      : {}),
+    ...(data.tradingPairs !== undefined
+      ? {
+          tradingPairRegistry: tradingPairRegistrySchema.parse({
+            id: 'registry',
+            userId,
+            items: data.tradingPairs,
+          }),
+        }
+      : {}),
+    ...(data.tradingBalances !== undefined
+      ? {
+          tradingBalanceRegistry: tradingBalanceRegistrySchema.parse({
+            id: 'registry',
+            userId,
+            items: data.tradingBalances,
+          }),
+        }
+      : {}),
   };
   // Backup restore is one server transaction. Authentication identity never comes from a file.
   await mutateCloudData(draft => {
@@ -128,6 +168,10 @@ export async function deleteAllData(): Promise<void> {
     draft.currencies = [];
     draft.investments = [];
     draft.investmentTypeRegistry = undefined;
+    draft.trades = [];
+    draft.tradingStrategyRegistry = undefined;
+    draft.tradingPairRegistry = undefined;
+    draft.tradingBalanceRegistry = undefined;
     // Retain Google identity and migration receipts; deleting data is not deleting the account.
   });
 }

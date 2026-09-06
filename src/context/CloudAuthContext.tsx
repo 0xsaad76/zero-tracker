@@ -6,7 +6,7 @@ import {supabase} from '../cloud/client';
 import {GOOGLE_WEB_CLIENT_ID} from '../config/supabase';
 import {mutateCloudData, readCloudData, requireCloudUser, setCloudUser, type CloudData} from '../cloud/records';
 import {moveLegacyData, readLegacyData} from '../cloud/legacy';
-import {fetchUserData} from '../redux/slice/userIdSlice';
+import {hydrateUserData} from '../redux/slice/userIdSlice';
 import {setIsOnboarded} from '../redux/slice/isOnboardedSlice';
 import {useAppDispatch} from '../redux/hooks';
 import {restoreBackupPreferences} from '../utils/backupPreferences';
@@ -14,6 +14,9 @@ import {clearYearsCache} from '../utils/availableYearsCache';
 import {clearErrorLog} from '../utils/errorLog';
 import {useThemeColors} from './ThemeContext';
 import {clearInvestmentReminders} from '../investments/reminders';
+import StorageService from '../utils/asyncStorageService';
+
+const EXPECTED_SESSION = 'cloudSessionExpected';
 
 interface AuthContext {
   email: string;
@@ -38,10 +41,16 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
   const [revision, setRevision] = useState(0);
   const activeUser = useRef<string | null>(null);
   const signingIn = useRef(false);
+  const restoringSession = useRef(false);
+  const sessionRef = useRef<Session | null>(null);
+  const restoreSessionRef = useRef<() => Promise<boolean>>(async () => false);
   const reload = useCallback(() => {
     // A restore or deletion can replace data without changing the account.
     // Discard pending fetches as well as the previous account snapshot.
-    setStatus('loading');
+    const id = sessionRef.current?.user.id ?? null;
+    setCloudUser(id);
+    activeUser.current = id;
+    setStatus(id ? 'loading' : 'login');
     clearYearsCache();
     dispatch({type: 'cloud/reset'});
     setRevision(r => r + 1);
@@ -52,6 +61,8 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
     const update = (next: Session | null) => {
       if (!alive) return;
       const id = next?.user.id ?? null;
+      sessionRef.current = next;
+      if (id) StorageService.setBoolean(EXPECTED_SESSION, true);
       setCloudUser(id);
       if (activeUser.current !== id) {
         activeUser.current = id;
@@ -65,23 +76,65 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       setSession(next);
       if (!id) setStatus('login');
     };
+    const restoreSession = async () => {
+      if (!StorageService.getBoolean(EXPECTED_SESSION) || restoringSession.current || signingIn.current) return false;
+      restoringSession.current = true;
+      setStatus('loading');
+      try {
+        GoogleSignin.configure({webClientId: GOOGLE_WEB_CLIENT_ID, scopes: ['email', 'profile']});
+        const result = await GoogleSignin.signInSilently();
+        if (result.type !== 'success' || !result.data.idToken) {
+          update(null);
+          return false;
+        }
+        const {data, error: authError} = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: result.data.idToken,
+        });
+        if (authError || !data.session) {
+          update(null);
+          return false;
+        }
+        update(data.session);
+        return true;
+      } catch {
+        update(null);
+        return false;
+      } finally {
+        restoringSession.current = false;
+      }
+    };
+    restoreSessionRef.current = restoreSession;
     // Keep callbacks synchronous: Supabase holds its auth lock during notification.
     const {
       data: {subscription},
-    } = supabase.auth.onAuthStateChange((_event, next) => update(next));
+    } = supabase.auth.onAuthStateChange((event, next) => {
+      update(next);
+      // A revoked/expired Supabase refresh token should not force the account
+      // picker back onto a user who still has a valid Google credential.
+      if (event === 'SIGNED_OUT' && StorageService.getBoolean(EXPECTED_SESSION)) void restoreSession();
+    });
     void supabase.auth
       .getSession()
       .then(({data, error: authError}) => {
         if (!alive) return;
         if (authError) {
-          setError('Could not restore your sign-in. Please try again.');
-          setStatus('login');
-        } else update(data.session);
+          if (StorageService.getBoolean(EXPECTED_SESSION)) void restoreSession();
+          else {
+            setError('Could not restore your sign-in. Please try again.');
+            setStatus('login');
+          }
+        } else if (data.session) update(data.session);
+        else if (!StorageService.getBoolean(EXPECTED_SESSION)) update(null);
+        else void restoreSession();
       })
       .catch(() => {
         if (alive) {
-          setError('Could not access secure sign-in storage.');
-          setStatus('login');
+          if (StorageService.getBoolean(EXPECTED_SESSION)) void restoreSession();
+          else {
+            setError('Could not access secure sign-in storage.');
+            setStatus('login');
+          }
         }
       });
     const refresh = (state: string) => {
@@ -95,7 +148,6 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       subscription.unsubscribe();
       listener.remove();
       supabase.auth.stopAutoRefresh();
-      setCloudUser(null);
     };
   }, [dispatch]);
 
@@ -103,6 +155,10 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
   useEffect(() => {
     if (!userId || !session) return;
     let alive = true;
+    // Reassert the identity for retries and development remounts. A real
+    // sign-out changes userId and cancels this effect before any request wins.
+    setCloudUser(userId);
+    activeUser.current = userId;
     setStatus('loading');
     void (async () => {
       const old = await readLegacyData();
@@ -116,25 +172,30 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       const data = await readCloudData();
       if (!alive) return;
       requireCloudUser(userId);
-      if (!data.users.length) {
+      let profile = data.users.find(user => user.id === userId);
+      if (!profile) {
+        const name = session.user.user_metadata.full_name;
+        profile = {
+          id: userId,
+          username: typeof name === 'string' ? name : 'User',
+          email: session.user.email ?? '',
+        };
         await mutateCloudData(draft => {
           requireCloudUser(userId);
-          const name = session.user.user_metadata.full_name;
-          if (!draft.users.length)
-            draft.users.push({
-              id: userId,
-              username: typeof name === 'string' ? name : 'User',
-              email: session.user.email ?? '',
-            });
+          if (!draft.users.length) draft.users.push(profile!);
         });
       }
       if (!alive) return;
       restoreBackupPreferences(
         data.preferences ?? {theme: 'system', locale: null, weekStart: 'monday', showBudgetProgress: true},
       );
-      await dispatch(fetchUserData()).unwrap();
-      if (!alive) return;
-      requireCloudUser(userId);
+      dispatch(
+        hydrateUserData({
+          userId,
+          userName: profile.username,
+          userEmail: profile.email,
+        }),
+      );
       dispatch(setIsOnboarded(data.currencies.length > 0));
       setError('');
       setStatus('ready');
@@ -208,6 +269,7 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
     dispatch({type: 'cloud/reset'});
     setLegacy(null);
     setStatus('loading');
+    StorageService.setBoolean(EXPECTED_SESSION, false);
     let reminderCleanupWarning = '';
     try {
       // Do not leave a previous account's device alarms behind after sign-out.
@@ -222,6 +284,7 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       if (signOutError) throw signOutError;
       await GoogleSignin.signOut().catch(() => {});
       setSession(null);
+      sessionRef.current = null;
       activeUser.current = null;
       setError(reminderCleanupWarning);
       setStatus('login');
@@ -229,6 +292,7 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       // Local credentials survived: restore the matching data identity so
       // retrying bootstrap works, while the cleared screens stay hidden.
       setCloudUser(activeUser.current);
+      StorageService.setBoolean(EXPECTED_SESSION, true);
       setError('Could not complete sign-out. Retry to clear your saved sign-in.');
       setStatus('error');
     } finally {
@@ -236,6 +300,11 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       setBusy(false);
     }
   }, [dispatch]);
+
+  const retry = () => {
+    if (sessionRef.current) reload();
+    else void restoreSessionRef.current();
+  };
 
   const migrate = async () => {
     if (!legacy || busy || !session) return;
@@ -297,7 +366,7 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
             void migrate();
           })
         : null}
-      {status === 'error' ? action('Try again', reload) : null}
+      {status === 'error' ? action('Try again', retry) : null}
       {session && status !== 'loading'
         ? action(
             'Sign out / choose another account',

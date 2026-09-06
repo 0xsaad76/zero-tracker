@@ -54,6 +54,12 @@ export const upgradeExportData = (raw: RawExport): ExportData => {
     version = 7;
   }
 
+  if (version < 8) {
+    // An absent trading section leaves an existing journal untouched on import.
+    // Missing registries fall back to SFP/Trendline/Divergences and BTC/ETH.
+    version = 8;
+  }
+
   if (__DEV__ && version < CURRENT_EXPORT_VERSION) {
     console.warn(`Export format v${version} is behind current v${CURRENT_EXPORT_VERSION}`);
   }

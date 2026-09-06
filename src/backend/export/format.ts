@@ -18,6 +18,9 @@
  *                 monthly valuations, and reminder preferences.
  *   v7          — Investment types are user-managed and optional. Type definitions
  *                 travel with the portfolio so custom labels survive a restore.
+ *   v8          — Trading journal: trades with pair, direction, leverage, average
+ *                 price, strategy, reason, risk/reward, and PnL, plus custom
+ *                 strategy/pair registries and monthly opening balances.
  *
  * RULES:
  *   - Bump when the ExportData shape or data semantics change.
@@ -29,6 +32,6 @@
  *   Example: zero_v3_20260321163018.json
  *   The version in the filename matches the version inside the JSON.
  */
-export const CURRENT_EXPORT_VERSION = 7;
+export const CURRENT_EXPORT_VERSION = 8;
 
 export type {ExportData, ExportEnvelope} from './validate';

@@ -102,7 +102,8 @@ daemon memory; do not do this while a build is running.
 
 - Login, add/edit spending, and restart the app to verify confirmed saves.
 - Weekly/monthly limits, category progress, hide/show setting, and full dates.
-- Investing: add/edit/delete investment types (including detaching a type in use), create an investment with No type, and add/edit/delete an investment, contribution, withdrawal, and monthly valuation; verify due badges, reminder permission, month navigation, and portfolio/per-investment reports. Trading remains a placeholder.
+- Investing: add/edit/delete investment types (including detaching a type in use), create an investment with No type, and add/edit/delete an investment, contribution, withdrawal, and monthly valuation; verify due badges, reminder permission, month navigation, and portfolio/per-investment reports.
+- Trading: add/edit/delete a trade (pair, long/short, leverage, average price, strategy, reason, risk/reward, PnL with minus for losses), add/rename/delete a strategy and pair (including the in-use guard), set the monthly opening balance and verify closing math, and filter by month/week/day and pair; verify plain-English and chart reports.
 - Sign-out and sign-in again should restore the same cloud data.
 - Reinstall recovery is a separate destructive test: only do it after confirming
   the data exists in the cloud, ideally with a manual JSON export. Signing back

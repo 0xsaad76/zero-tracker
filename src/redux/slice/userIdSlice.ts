@@ -1,4 +1,4 @@
-import {createAsyncThunk, createSlice} from '@reduxjs/toolkit';
+import {createAsyncThunk, createSlice, type PayloadAction} from '@reduxjs/toolkit';
 import {RootState} from '../rootReducer';
 import {getAllUsers} from '../../cloud';
 
@@ -14,7 +14,7 @@ const initialState: UserState = {
   error: null,
 };
 
-interface UserData {
+export interface UserData {
   userId: string;
   userName: string;
   userEmail: string;
@@ -40,7 +40,13 @@ export const fetchUserData = createAsyncThunk<UserData, void, {rejectValue: stri
 const userIdSlice = createSlice({
   name: 'userId',
   initialState,
-  reducers: {},
+  reducers: {
+    hydrateUserData: (state, action: PayloadAction<UserData>) => {
+      state.userId = action.payload.userId;
+      state.isLoading = false;
+      state.error = null;
+    },
+  },
   extraReducers: builder => {
     builder
       .addCase(fetchUserData.pending, state => {
@@ -62,5 +68,7 @@ const userIdSlice = createSlice({
 export const selectUserId = (state: RootState) => state.userId.userId;
 export const selectUserLoading = (state: RootState) => state.userId.isLoading;
 export const selectUserError = (state: RootState) => state.userId.error;
+
+export const {hydrateUserData} = userIdSlice.actions;
 
 export default userIdSlice.reducer;

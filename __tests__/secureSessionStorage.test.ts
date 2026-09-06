@@ -9,6 +9,17 @@ it('returns null for an absent session', async () => {
   await expect(secureSessionStorage.getItem('session-key')).resolves.toBeNull();
 });
 
+it('reuses the secure session in memory during the running process', async () => {
+  jest.mocked(Keychain.getGenericPassword).mockResolvedValueOnce({
+    username: 'session',
+    password: 'cached-session-token',
+    service: 'cached-session-key',
+  } as never);
+  await expect(secureSessionStorage.getItem('cached-session-key')).resolves.toBe('cached-session-token');
+  await expect(secureSessionStorage.getItem('cached-session-key')).resolves.toBe('cached-session-token');
+  expect(Keychain.getGenericPassword).toHaveBeenCalledTimes(1);
+});
+
 it('stores credentials in the device-only secure store', async () => {
   await secureSessionStorage.setItem('session-key', 'session-token');
   expect(Keychain.setGenericPassword).toHaveBeenCalledWith('session', 'session-token', {
