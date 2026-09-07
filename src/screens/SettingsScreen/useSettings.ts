@@ -10,7 +10,7 @@ import {
 } from '../../redux/slice/currencyDataSlice';
 import {useCallback} from 'react';
 import {getAppVersion} from '../../utils/getVersion';
-import {useTheme} from '../../context/ThemeContext';
+import {useTheme, isDarkThemeVariant} from '../../context/ThemeContext';
 import {useDialog} from '../../context/DialogContext';
 import {updateUserById, updateCurrencyById, deleteAllData, getAllData} from '../../cloud';
 import {updateCloudPreferences} from '../../cloud/preferences';
@@ -37,7 +37,7 @@ const useSettings = () => {
   const currencyCode = useAppSelector(selectCurrencyCode);
   const currencyName = useAppSelector(selectCurrencyName);
   const currencySymbol = useAppSelector(selectCurrencySymbol);
-  const {colors, themeMode} = useTheme();
+  const {colors, themeMode, darkVariant, setDarkVariant} = useTheme();
   const {email, signOut, reload} = useCloudAuth();
   const {showDialog, showAlert} = useDialog();
   const appVersion = getAppVersion();
@@ -69,6 +69,14 @@ const useSettings = () => {
       await handlePreferenceUpdate({theme});
     },
     [handlePreferenceUpdate, showAlert],
+  );
+
+  const handleDarkVariantSelection = useCallback(
+    (variant: string) => {
+      if (!isDarkThemeVariant(variant)) return;
+      setDarkVariant(variant);
+    },
+    [setDarkVariant],
   );
 
   const handleNameUpdate = useCallback(
@@ -232,6 +240,8 @@ const useSettings = () => {
     appVersion,
     colors,
     handleThemeSelection,
+    handleDarkVariantSelection,
+    selectedDarkVariant: darkVariant,
     handleNameUpdate,
     handleCurrencyUpdate,
     selectedTheme: themeMode,

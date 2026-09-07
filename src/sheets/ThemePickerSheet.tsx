@@ -2,22 +2,34 @@ import {TouchableOpacity, View} from 'react-native';
 import React, {useCallback, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {SheetManager, SheetProps} from 'react-native-actions-sheet';
-import useThemeColors from '../hooks/useThemeColors';
+import {useTheme, DARK_THEME_VARIANTS, type DarkThemeVariant} from '../context/ThemeContext';
 import {CustomBottomSheet} from '../components/atoms/CustomBottomSheet';
 import PrimaryText from '../components/atoms/PrimaryText';
 import {gs} from '../styles/globalStyles';
 
 const THEMES = ['light', 'dark', 'system'] as const;
 
+const VARIANT_LABELS = {
+  classic: 'settings.darkClassic',
+  midnight: 'settings.darkMidnight',
+  ghost: 'settings.darkGhost',
+} as const satisfies Record<DarkThemeVariant, `settings.dark${string}`>;
+
 const ThemePickerSheet: React.FC<SheetProps<'theme-picker-sheet'>> = React.memo(props => {
   const {t} = useTranslation();
-  const colors = useThemeColors();
+  const {colors} = useTheme();
   const [selected, setSelected] = useState(props.payload?.currentTheme ?? 'system');
+  const [variant, setVariant] = useState<DarkThemeVariant>(
+    props.payload?.currentVariant && DARK_THEME_VARIANTS.some(item => item.id === props.payload?.currentVariant)
+      ? (props.payload.currentVariant as DarkThemeVariant)
+      : 'classic',
+  );
 
   const handleConfirm = useCallback(() => {
     props.payload?.onSelect?.(selected);
+    props.payload?.onSelectVariant?.(variant);
     void SheetManager.hide(props.sheetId);
-  }, [props, selected]);
+  }, [props, selected, variant]);
 
   return (
     <CustomBottomSheet
@@ -33,7 +45,11 @@ const ThemePickerSheet: React.FC<SheetProps<'theme-picker-sheet'>> = React.memo(
           <TouchableOpacity key={theme} onPress={() => setSelected(theme)} activeOpacity={0.6}>
             <View style={[gs.rowBetweenCenter, gs.py12]}>
               <PrimaryText size={15} weight={selected === theme ? 'semibold' : 'medium'}>
-                {theme === 'light' ? t('settings.themeLight') : theme === 'dark' ? t('settings.themeDark') : t('settings.themeSystem')}
+                {theme === 'light'
+                  ? t('settings.themeLight')
+                  : theme === 'dark'
+                    ? t('settings.themeDark')
+                    : t('settings.themeSystem')}
               </PrimaryText>
               <View
                 style={[
@@ -43,7 +59,32 @@ const ThemePickerSheet: React.FC<SheetProps<'theme-picker-sheet'>> = React.memo(
                   gs.center,
                   {borderColor: selected === theme ? colors.accentGreen : colors.secondaryText},
                 ]}>
-                {selected === theme && (
+                {selected === theme && <View style={[gs.size10, gs.rounded5, {backgroundColor: colors.accentGreen}]} />}
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+        <PrimaryText size={12} weight="semibold" color={colors.secondaryText} style={[gs.mt15, gs.mb5]}>
+          {t('sheets.selectDarkStyle')}
+        </PrimaryText>
+        {DARK_THEME_VARIANTS.map(item => (
+          <TouchableOpacity key={item.id} onPress={() => setVariant(item.id)} activeOpacity={0.6}>
+            <View style={[gs.rowBetweenCenter, gs.py12]}>
+              <View style={[gs.row, gs.itemsCenter, gs.gap8]}>
+                <View style={[gs.size20, gs.rounded10, {backgroundColor: item.accent}]} />
+                <PrimaryText size={15} weight={variant === item.id ? 'semibold' : 'medium'}>
+                  {t(VARIANT_LABELS[item.id])}
+                </PrimaryText>
+              </View>
+              <View
+                style={[
+                  gs.size20,
+                  gs.rounded10,
+                  gs.border2,
+                  gs.center,
+                  {borderColor: variant === item.id ? colors.accentGreen : colors.secondaryText},
+                ]}>
+                {variant === item.id && (
                   <View style={[gs.size10, gs.rounded5, {backgroundColor: colors.accentGreen}]} />
                 )}
               </View>

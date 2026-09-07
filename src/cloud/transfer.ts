@@ -13,11 +13,13 @@ import {
   tradingPairRegistrySchema,
   tradingStrategyRegistrySchema,
 } from '../trading/model';
+import {recurringScheduleExportSchema, type RecurringScheduleExport} from '../recurring/model';
 
 export async function getAllData(): Promise<ExportData> {
   const d = await readCloudData();
   const categories = new Map(d.categories.map(c => [c.id, c.name]));
   const debtors = new Map(d.debtors.map(c => [c.id, c.title]));
+  const investments = new Map((d.investments ?? []).map(i => [i.id, i.name]));
   return {
     users: d.users.map(({username, email}) => ({username, email})),
     categories: d.categories.map(({name, categoryStatus, icon, color}) => ({name, categoryStatus, icon, color})),
@@ -50,6 +52,21 @@ export async function getAllData(): Promise<ExportData> {
     tradingStrategies: resolveTradingStrategies(d.tradingStrategyRegistry),
     tradingPairs: resolveTradingPairs(d.tradingPairRegistry),
     tradingBalances: (d.tradingBalanceRegistry?.items ?? []).map(item => ({...item})),
+    recurringSchedules: (d.recurringSchedules ?? []).flatMap(
+      ({userId: _owner, ...schedule}): RecurringScheduleExport[] => {
+        if (schedule.target === 'expense') {
+          const {categoryId, ...rest} = schedule;
+          return [{...rest, categoryName: categories.get(categoryId) ?? 'Unknown'}];
+        }
+        if (schedule.target === 'investment') {
+          const {investmentId, ...rest} = schedule;
+          const name = investments.get(investmentId);
+          return name ? [{...rest, investmentName: name}] : [];
+        }
+        const {debtorId, ...rest} = schedule;
+        return [{...rest, debtorTitle: debtors.get(debtorId) ?? 'Unknown'}];
+      },
+    ),
   };
 }
 
@@ -78,11 +95,42 @@ export async function importAllData(data: ExportData): Promise<ImportResult> {
   }));
   const categoryId = (name: string) => categories.find(c => c.name === name)!.id;
   const debtorId = (title: string) => debtors.find(d => d.title === title)!.id;
+  const investments = (data.investments ?? []).map(i => ({...investmentBackupSchema.parse(i), id: nanoid(24), userId}));
+  const investmentId = (name: string) => investments.find(i => i.name === name)?.id;
+  // Schedules whose category, investment, or debtor is missing from the same
+  // backup are dropped: posting them would fail every launch. A complete
+  // backup always resolves everything.
+  const recurringSchedules: NonNullable<CloudData['recurringSchedules']> = [];
+  for (const schedule of data.recurringSchedules ?? []) {
+    const parsed = recurringScheduleExportSchema.parse(schedule);
+    if (parsed.target === 'expense') {
+      const {categoryName, ...rest} = parsed;
+      if (!categories.some(c => c.name === categoryName)) {
+        if (__DEV__) console.warn('Skipping a recurring schedule with an unknown category.');
+        continue;
+      }
+      recurringSchedules.push({...rest, categoryId: categoryId(categoryName), id: nanoid(24), userId});
+    } else if (parsed.target === 'investment') {
+      const {investmentName, ...rest} = parsed;
+      const id = investmentId(investmentName);
+      if (!id) {
+        if (__DEV__) console.warn('Skipping a recurring schedule with an unknown investment.');
+        continue;
+      }
+      recurringSchedules.push({...rest, investmentId: id, id: nanoid(24), userId});
+    } else {
+      const {debtorTitle, ...rest} = parsed;
+      if (!debtors.some(d => d.title === debtorTitle)) {
+        if (__DEV__) console.warn('Skipping a recurring schedule with an unknown debtor.');
+        continue;
+      }
+      recurringSchedules.push({...rest, debtorId: debtorId(debtorTitle), id: nanoid(24), userId});
+    }
+  }
   const imported: Omit<CloudData, 'users'> = {
-    ...(data.investments
-      ? {investments: data.investments.map(i => ({...investmentBackupSchema.parse(i), id: nanoid(24), userId}))}
-      : {}),
+    ...(data.investments ? {investments} : {}),
     ...(data.trades ? {trades: data.trades.map(t => ({...tradeBackupSchema.parse(t), id: nanoid(24), userId}))} : {}),
+    ...(recurringSchedules.length ? {recurringSchedules} : {}),
     categories,
     debtors,
     currencies: plan.currencies.slice(0, 1).map(c => ({...c, id: userId, userId})),
@@ -172,6 +220,7 @@ export async function deleteAllData(): Promise<void> {
     draft.tradingStrategyRegistry = undefined;
     draft.tradingPairRegistry = undefined;
     draft.tradingBalanceRegistry = undefined;
+    draft.recurringSchedules = [];
     // Retain Google identity and migration receipts; deleting data is not deleting the account.
   });
 }

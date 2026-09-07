@@ -4,6 +4,18 @@ import StorageService, {storage} from '../utils/asyncStorageService';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
+export type DarkThemeVariant = 'classic' | 'midnight' | 'ghost';
+
+export const DARK_THEME_VARIANTS: ReadonlyArray<{id: DarkThemeVariant; accent: string}> = [
+  {id: 'classic', accent: '#B1FB98'},
+  {id: 'midnight', accent: '#5B8DEF'},
+  {id: 'ghost', accent: '#E8E8E8'},
+];
+
+const DARK_VARIANT_KEY = 'darkThemeVariant';
+
+export const isDarkThemeVariant = (value: unknown): value is DarkThemeVariant =>
+  DARK_THEME_VARIANTS.some(variant => variant.id === value);
 
 export interface ThemeColors {
   primaryBackground: string;
@@ -46,23 +58,75 @@ const LightColors: ThemeColors = {
 };
 
 const DarkColors: ThemeColors = {
-  primaryBackground: '#0F0F0F',
-  primaryText: '#FFFFFF',
-  secondaryBackground: '#333333',
-  secondaryText: '#CCCCCC',
+  primaryBackground: '#212121',
+  primaryText: '#ECECEC',
+  secondaryBackground: '#383838',
+  secondaryText: '#B4B4B4',
   accentGreen: '#B1FB98',
   accentOrange: '#FFA500',
-  accentBlue: '#1E90FF',
+  accentBlue: '#7AA5FF',
   buttonText: '#000000',
-  containerColor: '#1f1f1f',
-  cardBackground: '#262626',
-  secondaryContainerColor: '#1f1f1f',
-  secondaryAccent: '#333333',
-  iconContainer: '#313131',
+  containerColor: '#2A2A2A',
+  cardBackground: '#2F2F2F',
+  secondaryContainerColor: '#2A2A2A',
+  secondaryAccent: '#383838',
+  iconContainer: '#383838',
   sameBlack: '#000000',
   sameWhite: '#FAFBF7',
   accentRed: '#FF6347',
-  lightAccent: '#313131',
+  lightAccent: '#383838',
+};
+
+const DarkMidnightColors: ThemeColors = {
+  primaryBackground: '#212121',
+  primaryText: '#ECECEC',
+  secondaryBackground: '#383838',
+  secondaryText: '#A8B0C2',
+  accentGreen: '#5B8DEF',
+  accentOrange: '#FFA500',
+  accentBlue: '#8AA9FF',
+  buttonText: '#FFFFFF',
+  containerColor: '#2A2A2A',
+  cardBackground: '#2F2F2F',
+  secondaryContainerColor: '#2A2A2A',
+  secondaryAccent: '#383838',
+  iconContainer: '#383838',
+  sameBlack: '#000000',
+  sameWhite: '#FAFBF7',
+  accentRed: '#FF6347',
+  lightAccent: '#383838',
+};
+
+const DarkGhostColors: ThemeColors = {
+  primaryBackground: '#1A1A1A',
+  primaryText: '#ECECEC',
+  secondaryBackground: '#383838',
+  secondaryText: '#B4B4B4',
+  accentGreen: '#E8E8E8',
+  accentOrange: '#C9C9C9',
+  accentBlue: '#A8A8A8',
+  buttonText: '#000000',
+  containerColor: '#2A2A2A',
+  cardBackground: '#2F2F2F',
+  secondaryContainerColor: '#2A2A2A',
+  secondaryAccent: '#383838',
+  iconContainer: '#383838',
+  sameBlack: '#000000',
+  sameWhite: '#FAFBF7',
+  accentRed: '#FF6347',
+  lightAccent: '#383838',
+};
+
+export const resolveDarkColors = (variant: DarkThemeVariant): ThemeColors => {
+  switch (variant) {
+    case 'midnight':
+      return DarkMidnightColors;
+    case 'ghost':
+      return DarkGhostColors;
+    case 'classic':
+    default:
+      return DarkColors;
+  }
 };
 
 interface ThemeContextType {
@@ -71,6 +135,8 @@ interface ThemeContextType {
   colors: ThemeColors;
   isDark: boolean;
   setThemeMode: (mode: ThemeMode) => void;
+  darkVariant: DarkThemeVariant;
+  setDarkVariant: (variant: DarkThemeVariant) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -87,13 +153,22 @@ const getInitialThemeMode = (): ThemeMode => {
   return 'system';
 };
 
+const getInitialDarkVariant = (): DarkThemeVariant => {
+  const saved = StorageService.getItemSync(DARK_VARIANT_KEY);
+  return isDarkThemeVariant(saved) ? saved : 'classic';
+};
+
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({children}) => {
   const systemColorScheme = useColorScheme();
   const [themeMode, setThemeModeState] = useState<ThemeMode>(getInitialThemeMode);
+  const [darkVariant, setDarkVariantState] = useState<DarkThemeVariant>(getInitialDarkVariant);
   useEffect(() => {
     const listener = storage.addOnValueChangedListener(key => {
       if (key === 'themePreference') {
         setThemeModeState(getInitialThemeMode());
+      }
+      if (key === DARK_VARIANT_KEY) {
+        setDarkVariantState(getInitialDarkVariant());
       }
     });
     return () => listener.remove();
@@ -107,8 +182,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({children}) => {
   }, [themeMode, systemColorScheme]);
 
   const colors = useMemo(() => {
-    return resolvedTheme === 'dark' ? DarkColors : LightColors;
-  }, [resolvedTheme]);
+    return resolvedTheme === 'dark' ? resolveDarkColors(darkVariant) : LightColors;
+  }, [resolvedTheme, darkVariant]);
 
   const isDark = resolvedTheme === 'dark';
 
@@ -120,6 +195,11 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({children}) => {
     setThemeModeState(mode);
   }, []);
 
+  const setDarkVariant = useCallback((variant: DarkThemeVariant) => {
+    StorageService.setItemSync(DARK_VARIANT_KEY, variant);
+    setDarkVariantState(variant);
+  }, []);
+
   const value = useMemo(
     () => ({
       themeMode,
@@ -127,8 +207,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({children}) => {
       colors,
       isDark,
       setThemeMode,
+      darkVariant,
+      setDarkVariant,
     }),
-    [themeMode, resolvedTheme, colors, isDark, setThemeMode],
+    [themeMode, resolvedTheme, colors, isDark, setThemeMode, darkVariant, setDarkVariant],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

@@ -47,22 +47,26 @@ cd android && ./gradlew assembleDebug --console=plain
 - [ ] A week crossing month/year boundaries includes all its spending.
 - [ ] Sunday/Monday week-start choice is respected.
 - [ ] Home progress visibility, theme, and locale reload from the cloud account.
+- [ ] Dark style picker (Classic/Midnight/Ghost) re-skins dark mode app-wide and survives restart; Light is unchanged.
 - [ ] Spending group labels show weekday and date.
 - [ ] Investment type add/rename/delete, No type, investment CRUD, contributions, withdrawals, monthly valuations, due badges, reminders, and reports work.
 - [ ] Trade add/edit/delete with pair, direction, leverage, average price, strategy, reason, risk/reward, and PnL; strategy/pair add/rename/delete with in-use guards; monthly opening/closing balances; month/week/day and pair filters; plain-English and chart reports.
+- [ ] Automation repeat toggles in Add expense/contribution/debt; launch catch-up posts every missed month backdated with one summary; pause/edit/delete per screen; skipped schedules reported when refs vanish.
 - [ ] Reports, backdated entries, large fonts, and accessibility labels are usable.
 
 ## Current evidence and remaining gate
 
-September 5, 2026: strict TypeScript and ESLint checks passed; Jest passed 301
-tests across 27 suites. The database harness passed trading and investment
-compatibility and nested validation, owner isolation, anonymous denial,
-conflict detection, atomic rollback, deletion scope, and restoration beyond
-1,000 records. The x86_64 Android debug APK built, installed, bundled from
-Metro, and reloaded without a fatal JavaScript or Android runtime error.
+September 5, 2026: strict TypeScript and ESLint checks passed; Jest passed 333
+tests across 32 suites. The database harness passed automation, trading, and
+investment compatibility and nested validation, owner isolation, anonymous
+denial, conflict detection, atomic rollback, deletion scope, and restoration
+beyond 1,000 records. The x86_64 Android debug APK built, installed, bundled
+from Metro, and reloaded without a fatal JavaScript or Android runtime error.
 A later Metro reload with the trading journal bundled also showed no
 RedBox or JavaScript error on the Pixel 7a emulator, but the device was
 signed out, so the signed-in trading flows above still require device QA.
+The recurring-automations runner, toggles, and sections below are covered by
+the automated gates only; signed-in device QA is still open.
 
 See [cloud storage notes](supabase-storage.md) for automated and live database checks.
 The SDK license blocker was resolved with the owner's authorization on September

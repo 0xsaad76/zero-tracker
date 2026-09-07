@@ -33,6 +33,8 @@ import {gs} from '../../styles/globalStyles';
 import AmountInput from '../atoms/AmountInput';
 import {useDialog} from '../../context/DialogContext';
 import {requireCloudUser} from '../../cloud/records';
+import RecurringToggle from '../../recurring/RecurringToggle';
+import {saveRecurringSchedule} from '../../recurring/service';
 
 interface ExpenseEntryProps {
   type: string;
@@ -89,6 +91,8 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
     isAddButton ? '' : (expenseData?.expenseDescription ?? ''),
   );
   const [expenseAmount, setExpenseAmount] = useState(isAddButton ? '' : String(expenseData?.expenseAmount ?? ''));
+  const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const [repeatDay, setRepeatDay] = useState(() => String(Number(createdAt.slice(8, 10)) || 1));
 
   const expenseAmountError = hasInteracted
     ? expenseAmountSchema?.safeParse(Number(expenseAmount)).error?.issues || []
@@ -233,6 +237,30 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
         categoryId,
         createdAt,
       );
+      if (repeatMonthly) {
+        try {
+          await saveRecurringSchedule(
+            {
+              target: 'expense',
+              dayOfMonth: Number(repeatDay),
+              amount: Number(expenseAmount),
+              startMonth: formatDate(createdAt, 'YYYY-MM'),
+              categoryId,
+              title: expenseTitle,
+              description: expenseDescription,
+            },
+            undefined,
+            {lastPostedMonth: formatDate(createdAt, 'YYYY-MM')},
+          );
+        } catch (scheduleError) {
+          await showAlert({
+            type: 'warning',
+            message: `Expense saved, but the monthly automation was not set: ${
+              scheduleError instanceof Error ? scheduleError.message : 'Please try again.'
+            }`,
+          });
+        }
+      }
       requireCloudUser(capturedUserId);
       if (!mountedRef.current) {
         return;
@@ -267,8 +295,11 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
     expenseAmount,
     expenseDescription,
     createdAt,
+    repeatMonthly,
+    repeatDay,
     dispatch,
     showSaveFailure,
+    showAlert,
   ]);
 
   const handleUpdateExpense = useCallback(async () => {
@@ -417,6 +448,16 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
         setCreatedAt={setCreatedAt}
         label={t('transaction.dateLabel')}
       />
+
+      {isAddButton ? (
+        <RecurringToggle
+          enabled={repeatMonthly}
+          onToggle={setRepeatMonthly}
+          day={repeatDay}
+          onDay={setRepeatDay}
+          what="spending"
+        />
+      ) : null}
 
       <PrimaryText size={12} color={colors.secondaryText} style={gs.mb8}>
         {t('transaction.categoryLabel')}

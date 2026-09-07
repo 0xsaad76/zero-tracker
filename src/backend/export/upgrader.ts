@@ -60,6 +60,11 @@ export const upgradeExportData = (raw: RawExport): ExportData => {
     version = 8;
   }
 
+  if (version < 9) {
+    // Absent automations leave existing schedules untouched on import.
+    version = 9;
+  }
+
   if (__DEV__ && version < CURRENT_EXPORT_VERSION) {
     console.warn(`Export format v${version} is behind current v${CURRENT_EXPORT_VERSION}`);
   }

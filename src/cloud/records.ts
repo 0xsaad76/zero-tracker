@@ -18,6 +18,7 @@ import {
   type TradingStrategyRegistry,
 } from '../trading/model';
 import {clearInvestmentReminders, syncInvestmentReminderData} from '../investments/reminders';
+import {recurringScheduleSchema, type RecurringSchedule} from '../recurring/model';
 
 export interface CloudData {
   users: {id: string; username: string; email: string}[];
@@ -35,6 +36,7 @@ export interface CloudData {
   tradingStrategyRegistry?: TradingStrategyRegistry;
   tradingPairRegistry?: TradingPairRegistry;
   tradingBalanceRegistry?: TradingBalanceRegistry;
+  recurringSchedules?: RecurringSchedule[];
 }
 const collections = [
   'users',
@@ -53,7 +55,8 @@ type RecordKind =
   | 'investment_types'
   | 'trading_strategies'
   | 'trading_pairs'
-  | 'trading_balances';
+  | 'trading_balances'
+  | 'recurring_schedules';
 const recognizedKinds: RecordKind[] = [
   ...collections,
   'settings',
@@ -61,6 +64,7 @@ const recognizedKinds: RecordKind[] = [
   'trading_strategies',
   'trading_pairs',
   'trading_balances',
+  'recurring_schedules',
 ];
 export interface CloudRecord {
   kind: RecordKind;
@@ -85,22 +89,27 @@ const RECENT_READ_MS = 1500;
 // applied by the owner, not by the app). Reads transparently fall back to the
 // newest RPC the server actually has, so the app keeps working instead of
 // landing on the retry screen. Writes of unknown kinds still fail at the
-// server CHECK constraint; trading mutations guard on cloudProtocolVersion().
-const READ_RPCS = ['zero_read_v4', 'zero_read_v3', 'zero_read_v2'] as const;
+// server CHECK constraint; trading/recurring mutations guard on the version.
+const READ_RPCS = ['zero_read_v5', 'zero_read_v4', 'zero_read_v3', 'zero_read_v2'] as const;
 let readRpcIndex = 0;
 
 const missingFunction = (error: unknown) =>
   (error as {code?: string} | null)?.code === 'PGRST202' ||
   /could not find the function/i.test((error as Error | null)?.message ?? '');
 
-/** Newest read protocol to use: optimistic v4 before the first read, the confirmed fallback afterwards. */
+/** Newest read protocol to use: optimistic v5 before the first read, the confirmed fallback afterwards. */
 export function cloudProtocolVersion(): number {
-  return readRpcIndex >= READ_RPCS.length ? 0 : 4 - readRpcIndex;
+  return readRpcIndex >= READ_RPCS.length ? 0 : 5 - readRpcIndex;
 }
 
 /** True once the server confirmed the trading protocol (v4). Optimistic before the first read. */
 export function tradingSyncAvailable(): boolean {
   return cloudProtocolVersion() >= 4;
+}
+
+/** True once the server confirmed the automations protocol (v5). Optimistic before the first read. */
+export function recurringSyncAvailable(): boolean {
+  return cloudProtocolVersion() >= 5;
 }
 
 export function setCloudUser(userId: string | null) {
@@ -173,6 +182,7 @@ export const emptyCloudData = (): CloudData => ({
   budgets: [],
   investments: [],
   trades: [],
+  recurringSchedules: [],
 });
 
 export function decodeRecords(records: CloudRecord[]): CloudData {
@@ -194,6 +204,11 @@ export function decodeRecords(records: CloudRecord[]): CloudData {
     } else if (record.kind === 'trades') {
       result.trades!.push({
         ...tradeBackupSchema.parse({...record.data, id: record.id}),
+        userId: String(record.data.userId),
+      });
+    } else if (record.kind === 'recurring_schedules') {
+      result.recurringSchedules!.push({
+        ...recurringScheduleSchema.parse({...record.data, id: record.id}),
         userId: String(record.data.userId),
       });
     } else if (record.kind === 'investments') {
@@ -227,6 +242,9 @@ export function encodeRecords(data: CloudData): CloudRecord[] {
   if (data.investmentTypeRegistry) {
     const registry = investmentTypeRegistrySchema.parse(data.investmentTypeRegistry);
     records.push({kind: 'investment_types', id: 'registry', data: {...registry}});
+  }
+  for (const row of data.recurringSchedules ?? []) {
+    records.push({kind: 'recurring_schedules', id: row.id, data: {...row}});
   }
   if (data.tradingStrategyRegistry) {
     const registry = tradingStrategyRegistrySchema.parse(data.tradingStrategyRegistry);

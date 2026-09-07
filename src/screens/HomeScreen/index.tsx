@@ -15,6 +15,8 @@ import useFormatAmount from '../../hooks/useFormatAmount';
 import {SheetManager} from 'react-native-actions-sheet';
 import {gs, hitSlop} from '../../styles/globalStyles';
 import BudgetProgressCard from '../../components/molecules/BudgetProgressCard';
+import SchedulesSection from '../../recurring/SchedulesSection';
+import {useRecurringSchedules} from '../../recurring/useRecurringSchedules';
 
 const HomeScreen = () => {
   const {
@@ -50,6 +52,11 @@ const HomeScreen = () => {
     screen: 'home',
     itemCount: sortedTransactions.length,
   });
+  const {
+    schedules: spendingSchedules,
+    nameOf: spendingScheduleName,
+    reload: reloadSpendingSchedules,
+  } = useRecurringSchedules('expense');
 
   const openMonthPicker = useCallback(() => {
     void SheetManager.show('month-year-picker-sheet', {
@@ -112,6 +119,17 @@ const HomeScreen = () => {
           daysInMonth={daysInMonth}
           isCurrentMonth={isCurrentMonth}
         />
+        <SchedulesSection
+          title="Scheduled spending"
+          subtitle="Auto-added on their day each month. Pause or delete anytime."
+          schedules={spendingSchedules}
+          describe={schedule =>
+            schedule.target === 'expense'
+              ? `${schedule.title} → ${spendingScheduleName(schedule)}`
+              : spendingScheduleName(schedule)
+          }
+          onChanged={() => void reloadSpendingSchedules()}
+        />
       </View>
     ),
     [
@@ -132,6 +150,9 @@ const HomeScreen = () => {
       showBudgetProgress,
       sortedTransactions,
       daysInMonth,
+      spendingSchedules,
+      spendingScheduleName,
+      reloadSpendingSchedules,
       colors,
       openMonthPicker,
       formatAmount,

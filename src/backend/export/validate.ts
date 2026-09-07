@@ -8,6 +8,7 @@ import {
   tradingPairSchema,
   tradingStrategySchema,
 } from '../../trading/model';
+import {recurringScheduleExportSchema} from '../../recurring/model';
 
 const userSchema = z.object({
   username: z.string(),
@@ -118,6 +119,7 @@ const exportDataSchema = z
     tradingStrategies: tradingStrategyListSchema.optional(),
     tradingPairs: tradingPairListSchema.optional(),
     tradingBalances: tradingBalanceListSchema.optional(),
+    recurringSchedules: z.array(recurringScheduleExportSchema).optional(),
     preferences: z
       .object({
         theme: z.enum(['system', 'light', 'dark']),

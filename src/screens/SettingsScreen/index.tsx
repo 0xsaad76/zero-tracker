@@ -75,12 +75,20 @@ const SettingsRow: React.FC<SettingsRowProps> = ({
   </TouchableOpacity>
 );
 
+const VARIANT_LABELS = {
+  classic: 'settings.darkClassic',
+  midnight: 'settings.darkMidnight',
+  ghost: 'settings.darkGhost',
+} as const;
+
 const SettingsScreen = () => {
   const {t} = useTranslation();
   const {
     appVersion,
     colors,
     handleThemeSelection,
+    handleDarkVariantSelection,
+    selectedDarkVariant,
     handleNameUpdate,
     handleCurrencyUpdate,
     selectedTheme,
@@ -216,9 +224,13 @@ const SettingsScreen = () => {
         onSelect: (theme: string) => {
           handleThemeSelection(theme);
         },
+        currentVariant: selectedDarkVariant,
+        onSelectVariant: (variant: string) => {
+          handleDarkVariantSelection(variant);
+        },
       },
     });
-  }, [selectedTheme, handleThemeSelection]);
+  }, [selectedTheme, selectedDarkVariant, handleThemeSelection, handleDarkVariantSelection]);
 
   // Deliberately NOT dismissKeyboardOnTouch: this screen has no text input
   // (name, currency and budget are all edited in sheets), and the wrapper it
@@ -254,7 +266,7 @@ const SettingsScreen = () => {
               selectedTheme === 'light'
                 ? t('settings.themeLight')
                 : selectedTheme === 'dark'
-                  ? t('settings.themeDark')
+                  ? `${t('settings.themeDark')} · ${t(VARIANT_LABELS[selectedDarkVariant])}`
                   : t('settings.themeSystem')
             }
             onPress={openThemePicker}

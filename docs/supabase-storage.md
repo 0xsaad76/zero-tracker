@@ -13,8 +13,10 @@ Project: `wdsdcoumuawvfstyspbw`. Google provider plus the `zero_cloud_records`,
 `investment_records`, and `investment_record_validation` migrations were verified
 live. The `custom_investment_types` and `trading_records` migrations have passed
 the ephemeral PGlite harness only; apply them to the live project and re-verify
-before signing in a device with trading data. No paid branch, service, or
-billing change was made.
+before signing in a device with trading data. The `recurring_schedules`
+migration is likewise harness-only; automation reads fall back to older
+protocols and automation writes fail closed until it is applied. No paid
+branch, service, or billing change was made.
 
 Google native Android sign-in also needs an Android OAuth client for package
 `com.anotherwhy.zero` and the SHA-1 fingerprint of the key that signs the APK.

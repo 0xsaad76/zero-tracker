@@ -67,6 +67,8 @@ declare module 'react-native-actions-sheet' {
       payload: {
         currentTheme?: string;
         onSelect?: (theme: string) => void;
+        currentVariant?: string;
+        onSelectVariant?: (variant: string) => void;
       };
     }>;
     'week-start-picker-sheet': SheetDefinition<{

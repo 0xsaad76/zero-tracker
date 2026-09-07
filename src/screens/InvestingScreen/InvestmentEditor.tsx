@@ -22,6 +22,8 @@ import {
 } from '../../investments/model';
 import {saveInvestment, saveInvestmentEntry} from '../../investments/service';
 import {requestInvestmentReminderPermission} from '../../investments/reminders';
+import RecurringToggle from '../../recurring/RecurringToggle';
+import {saveRecurringSchedule} from '../../recurring/service';
 
 const parseLocal = (value: string) => {
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);
@@ -65,6 +67,10 @@ export function InvestmentEditor({
   const [startDate, setStartDate] = useState(localDate());
   const [reviewDayValue, setReviewDayValue] = useState('1');
   const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [firstAmount, setFirstAmount] = useState('');
+  const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const [repeatDayOverride, setRepeatDayOverride] = useState('');
+  const repeatDay = repeatDayOverride || reviewDayValue || '1';
   const [showDate, setShowDate] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -81,6 +87,9 @@ export function InvestmentEditor({
     setStartDate(investment?.startDate ?? localDate());
     setReviewDayValue(String(investment?.reviewDay ?? 1));
     setReminderEnabled(investment?.reminderEnabled ?? true);
+    setFirstAmount('');
+    setRepeatMonthly(false);
+    setRepeatDayOverride('');
   }, [visible, investment, types]);
 
   const save = async () => {
@@ -109,7 +118,51 @@ export function InvestmentEditor({
       if (reminderEnabled && !investment?.reminderEnabled && !(await requestInvestmentReminderPermission())) {
         throw new Error('Notifications are blocked. Allow notifications for Zero, or turn this reminder off.');
       }
-      await saveInvestment(parsed.data, investment?.id);
+      const key = await saveInvestment(parsed.data, investment?.id);
+      if (!investment && (firstAmount.trim() || repeatMonthly)) {
+        const numeric = Number(firstAmount);
+        if (
+          !Number.isFinite(numeric) ||
+          numeric < 0.01 ||
+          numeric > 1e12 ||
+          Math.abs(Math.round(numeric * 100) - numeric * 100) > 0.01
+        ) {
+          Alert.alert(
+            'Investment saved, but the first contribution was not recorded',
+            'Enter a valid amount with at most two decimal places, then add it as a contribution.',
+          );
+        } else {
+          const entryDate = startDate.slice(0, 10);
+          try {
+            await saveInvestmentEntry(key, {id: nanoid(24), date: entryDate, type: 'contribution', amount: numeric});
+          } catch (entryError) {
+            Alert.alert(
+              'Investment saved, but the first contribution was not recorded',
+              entryError instanceof Error ? entryError.message : 'Please try again.',
+            );
+          }
+          if (repeatMonthly) {
+            try {
+              await saveRecurringSchedule(
+                {
+                  target: 'investment',
+                  dayOfMonth: Number(repeatDay),
+                  amount: numeric,
+                  startMonth: entryDate.slice(0, 7),
+                  investmentId: key,
+                },
+                undefined,
+                {lastPostedMonth: entryDate.slice(0, 7)},
+              );
+            } catch (scheduleError) {
+              Alert.alert(
+                'Investment saved, but the monthly automation was not set',
+                scheduleError instanceof Error ? scheduleError.message : 'Please try again.',
+              );
+            }
+          }
+        }
+      }
       onSaved();
       onClose();
     } catch (error) {
@@ -190,6 +243,24 @@ export function InvestmentEditor({
             Short months use their last day. The reminder arrives around 9 AM and may be delayed by Android battery
             controls.
           </PrimaryText>
+          {!investment ? (
+            <View>
+              <PrimaryText size={12} color={colors.secondaryText} style={gs.mb5}>
+                First contribution (optional)
+              </PrimaryText>
+              <AmountInput value={firstAmount} onChangeText={setFirstAmount} style={gs.mb5} />
+              <PrimaryText size={11} color={colors.secondaryText} style={gs.mb5}>
+                Posts on the start date above. With Repeat on, the next months continue automatically.
+              </PrimaryText>
+              <RecurringToggle
+                enabled={repeatMonthly}
+                onToggle={setRepeatMonthly}
+                day={repeatDay}
+                onDay={setRepeatDayOverride}
+                what="SIP contribution"
+              />
+            </View>
+          ) : null}
           <View style={[gs.rowBetweenCenter, gs.p14, gs.rounded12, gs.mb20, {backgroundColor: colors.containerColor}]}>
             <View style={gs.flex1}>
               <PrimaryText size={14} weight="semibold">
@@ -245,10 +316,15 @@ export function InvestmentEntryEditor({
   const [saving, setSaving] = useState(false);
   const [stableId, setStableId] = useState(() => nanoid(24));
   const isValuation = mode === 'valuation';
+  const isNewContribution = !isValuation && mode === 'contribution' && !flow;
+  const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const [repeatDay, setRepeatDay] = useState(() => String(investment?.reviewDay ?? 1));
 
   useEffect(() => {
     if (!visible || !investment) return;
     setStableId(flow?.id ?? nanoid(24));
+    setRepeatMonthly(false);
+    setRepeatDay(String(investment.reviewDay));
     const existing = isValuation ? valuation : flow;
     setAmount(existing ? String('value' in existing ? existing.value : existing.amount) : '');
     let suggested = isValuation ? reviewDate(investment, month) : localDate();
@@ -285,6 +361,26 @@ export function InvestmentEntryEditor({
           ? {month, date: date.slice(0, 10), value: numeric}
           : {id: stableId, date: date.slice(0, 10), type: mode, amount: numeric},
       );
+      if (isNewContribution && repeatMonthly) {
+        try {
+          await saveRecurringSchedule(
+            {
+              target: 'investment',
+              dayOfMonth: Number(repeatDay),
+              amount: numeric,
+              startMonth: date.slice(0, 7),
+              investmentId: investment.id,
+            },
+            undefined,
+            {lastPostedMonth: date.slice(0, 7)},
+          );
+        } catch (scheduleError) {
+          Alert.alert(
+            'Contribution saved, but the monthly automation was not set',
+            scheduleError instanceof Error ? scheduleError.message : 'Please try again.',
+          );
+        }
+      }
       onSaved();
       onClose();
     } catch (error) {
@@ -327,6 +423,15 @@ export function InvestmentEntryEditor({
                 calculate investment gain or loss without counting deposits as profit.
               </PrimaryText>
             </View>
+          ) : null}
+          {isNewContribution ? (
+            <RecurringToggle
+              enabled={repeatMonthly}
+              onToggle={setRepeatMonthly}
+              day={repeatDay}
+              onDay={setRepeatDay}
+              what="SIP contribution"
+            />
           ) : null}
           <PrimaryButton
             colors={colors}

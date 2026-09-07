@@ -34,6 +34,7 @@ jest.mock('../src/cloud/records', () => ({
   requireCloudUser: jest.fn(),
 }));
 jest.mock('../src/cloud/legacy', () => ({readLegacyData: jest.fn(), moveLegacyData: jest.fn()}));
+jest.mock('../src/recurring/service', () => ({runRecurringSchedules: jest.fn()}));
 jest.mock('../src/cloud', () => ({getAllUsers: jest.fn()}));
 jest.mock('../src/context/ThemeContext', () => ({
   useThemeColors: () => ({
@@ -296,4 +297,34 @@ it('clears cached state while reloading data for the same account', async () => 
   });
   expect(output()).toContain('PRIVATE HOME');
   expect(store.getState().userName.userName).toBe('Person');
+});
+it('runs monthly automations at bootstrap only when schedules exist', async () => {
+  const {runRecurringSchedules} = jest.requireMock('../src/recurring/service') as {
+    runRecurringSchedules: jest.Mock;
+  };
+  runRecurringSchedules.mockResolvedValue({posted: [], skipped: []});
+  jest.mocked(supabase.auth.getSession).mockResolvedValue({data: {session}, error: null});
+  await render();
+  expect(output()).toContain('PRIVATE HOME');
+  expect(runRecurringSchedules).not.toHaveBeenCalled();
+  data = {
+    ...data,
+    recurringSchedules: [
+      {
+        id: 'sip',
+        userId: 'account-a',
+        target: 'expense',
+        dayOfMonth: 5,
+        amount: 200,
+        paused: false,
+        startMonth: '2026-09',
+        lastPostedMonth: null,
+        categoryId: 'food',
+        title: 'Cash withdrawal',
+        description: '',
+      },
+    ],
+  };
+  await press('Test reload');
+  expect(runRecurringSchedules).toHaveBeenCalledTimes(1);
 });

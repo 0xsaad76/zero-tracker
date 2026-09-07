@@ -1,6 +1,14 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {Alert, Modal, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import PrimaryView from '../../components/atoms/PrimaryView';
 import PrimaryText from '../../components/atoms/PrimaryText';
 import PrimaryButton from '../../components/atoms/PrimaryButton';
@@ -97,7 +105,12 @@ const TradingScreen = () => {
   const [balanceOpen, setBalanceOpen] = useState(false);
   const [balanceInput, setBalanceInput] = useState('');
   const [balanceSaving, setBalanceSaving] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [listCollapsed, setListCollapsed] = useState(false);
+  const collapseProgress = useSharedValue(0);
+  const collapseChevronStyle = useAnimatedStyle(() => ({
+    transform: [{rotate: `${interpolate(collapseProgress.value, [0, 1], [0, -90])}deg`}],
+  }));
   const formatTrading = useTradingFormat(currency);
   const formatPrice = useTradingPriceFormat(currency);
 
@@ -135,6 +148,12 @@ const TradingScreen = () => {
   const changeMonth = (next: string) => {
     setMonth(next);
     setAnchor(next === currentMonth ? today : `${next}-01`);
+  };
+
+  const toggleTradeList = () => {
+    const next = !listCollapsed;
+    setListCollapsed(next);
+    collapseProgress.value = withTiming(next ? 1 : 0, {duration: 250});
   };
 
   const switchCurrency = (next: TradingCurrency) => {
@@ -426,6 +445,19 @@ const TradingScreen = () => {
             </PrimaryText>
           </View>
           <View style={[gs.rowCenter, gs.gap8, gs.flexShrink]}>
+            {visible.length > 0 ? (
+              <TouchableOpacity
+                onPress={toggleTradeList}
+                hitSlop={hitSlop}
+                style={[gs.size40, gs.center, gs.rounded12, {backgroundColor: colors.secondaryAccent}]}
+                accessibilityLabel={listCollapsed ? 'Expand trades section' : 'Collapse trades section'}
+                accessibilityRole="button"
+                accessibilityState={{expanded: !listCollapsed}}>
+                <Animated.View style={collapseChevronStyle}>
+                  <Icon name="chevron-down" size={20} color={colors.primaryText} />
+                </Animated.View>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               onPress={() => setSetupOpen(true)}
               style={[
@@ -548,110 +580,114 @@ const TradingScreen = () => {
               />
             </View>
           </View>
-        ) : (
-          visible.map(trade => {
-            const open = expanded === trade.id;
-            return (
-              <View key={trade.id} style={[gs.rounded16, gs.mb10, {backgroundColor: colors.containerColor}]}>
-                <TouchableOpacity
-                  onPress={() => setExpanded(open ? null : trade.id)}
-                  style={gs.p14}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${tradingPairLabel(pairs, trade.pair)} ${trade.direction}, ${outcome(trade)}`}
-                  accessibilityState={{expanded: open}}>
-                  <View style={gs.rowBetweenCenter}>
-                    <View style={[gs.rowCenter, gs.gap10, gs.flex1]}>
-                      <View style={[gs.size40, gs.center, gs.rounded12, {backgroundColor: colors.secondaryAccent}]}>
-                        <Icon
-                          name={trade.direction === 'long' ? 'trending-up' : 'trending-down'}
-                          size={19}
-                          color={directionColor(trade)}
-                        />
+        ) : listCollapsed ? null : (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+            {visible.map(trade => {
+              const open = expandedIds.includes(trade.id);
+              return (
+                <View key={trade.id} style={[gs.rounded16, gs.mb10, {backgroundColor: colors.containerColor}]}>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setExpandedIds(current => (open ? current.filter(id => id !== trade.id) : [...current, trade.id]))
+                    }
+                    style={gs.p14}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${tradingPairLabel(pairs, trade.pair)} ${trade.direction}, ${outcome(trade)}`}
+                    accessibilityState={{expanded: open}}>
+                    <View style={gs.rowBetweenCenter}>
+                      <View style={[gs.rowCenter, gs.gap10, gs.flex1]}>
+                        <View style={[gs.size40, gs.center, gs.rounded12, {backgroundColor: colors.secondaryAccent}]}>
+                          <Icon
+                            name={trade.direction === 'long' ? 'trending-up' : 'trending-down'}
+                            size={19}
+                            color={directionColor(trade)}
+                          />
+                        </View>
+                        <View style={gs.flex1}>
+                          <PrimaryText size={14} weight="semibold" numberOfLines={1}>
+                            {tradingPairLabel(pairs, trade.pair)} · {trade.direction === 'long' ? 'Long' : 'Short'}{' '}
+                            {trade.leverage}x
+                          </PrimaryText>
+                          <PrimaryText size={10} color={colors.secondaryText} style={gs.mt3} numberOfLines={1}>
+                            {tradingStrategyLabel(strategies, trade.strategy)} · {trade.date} · 1:{trade.riskReward}
+                          </PrimaryText>
+                        </View>
+                      </View>
+                      <View style={gs.itemsEnd}>
+                        <PrimaryText
+                          size={14}
+                          weight="bold"
+                          variant="number"
+                          color={outcomeColor(trade)}
+                          numberOfLines={1}>
+                          {trade.pnl > 0 ? '+' : ''}
+                          {formatTrading(trade.pnl)}
+                        </PrimaryText>
+                        <View style={[gs.rowCenter, gs.gap4, gs.mt3]}>
+                          <View style={[gs.size8, gs.roundedFull, {backgroundColor: outcomeColor(trade)}]} />
+                          <PrimaryText size={9} color={outcomeColor(trade)}>
+                            {outcome(trade) === 'win' ? 'Win' : outcome(trade) === 'loss' ? 'Loss' : 'Breakeven'}
+                          </PrimaryText>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={[gs.row, gs.mt15]}>
+                      <View style={gs.flex1}>
+                        <PrimaryText size={9} color={colors.secondaryText}>
+                          AVG PRICE
+                        </PrimaryText>
+                        <PrimaryText size={12} variant="number" style={gs.mt3} numberOfLines={1}>
+                          {formatPrice(trade.avgPrice)}
+                        </PrimaryText>
                       </View>
                       <View style={gs.flex1}>
-                        <PrimaryText size={14} weight="semibold" numberOfLines={1}>
-                          {tradingPairLabel(pairs, trade.pair)} · {trade.direction === 'long' ? 'Long' : 'Short'}{' '}
-                          {trade.leverage}x
+                        <PrimaryText size={9} color={colors.secondaryText}>
+                          REASON
                         </PrimaryText>
-                        <PrimaryText size={10} color={colors.secondaryText} style={gs.mt3} numberOfLines={1}>
-                          {tradingStrategyLabel(strategies, trade.strategy)} · {trade.date} · 1:{trade.riskReward}
-                        </PrimaryText>
-                      </View>
-                    </View>
-                    <View style={gs.itemsEnd}>
-                      <PrimaryText
-                        size={14}
-                        weight="bold"
-                        variant="number"
-                        color={outcomeColor(trade)}
-                        numberOfLines={1}>
-                        {trade.pnl > 0 ? '+' : ''}
-                        {formatTrading(trade.pnl)}
-                      </PrimaryText>
-                      <View style={[gs.rowCenter, gs.gap4, gs.mt3]}>
-                        <View style={[gs.size8, gs.roundedFull, {backgroundColor: outcomeColor(trade)}]} />
-                        <PrimaryText size={9} color={outcomeColor(trade)}>
-                          {outcome(trade) === 'win' ? 'Win' : outcome(trade) === 'loss' ? 'Loss' : 'Breakeven'}
+                        <PrimaryText size={12} style={gs.mt3} numberOfLines={1}>
+                          {trade.reason}
                         </PrimaryText>
                       </View>
+                      <Icon name={open ? 'chevron-down' : 'chevron-right'} size={16} color={colors.secondaryText} />
                     </View>
-                  </View>
-                  <View style={[gs.row, gs.mt15]}>
-                    <View style={gs.flex1}>
-                      <PrimaryText size={9} color={colors.secondaryText}>
-                        AVG PRICE
-                      </PrimaryText>
-                      <PrimaryText size={12} variant="number" style={gs.mt3} numberOfLines={1}>
-                        {formatPrice(trade.avgPrice)}
-                      </PrimaryText>
-                    </View>
-                    <View style={gs.flex1}>
-                      <PrimaryText size={9} color={colors.secondaryText}>
-                        REASON
-                      </PrimaryText>
-                      <PrimaryText size={12} style={gs.mt3} numberOfLines={1}>
-                        {trade.reason}
-                      </PrimaryText>
-                    </View>
-                    <Icon name={open ? 'chevron-down' : 'chevron-right'} size={16} color={colors.secondaryText} />
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
 
-                {open ? (
-                  <View style={[gs.px14, gs.pb20]}>
-                    <View style={{height: 1, backgroundColor: colors.secondaryAccent}} />
-                    <View style={[gs.p12, gs.rounded12, gs.mt10, {backgroundColor: colors.secondaryAccent}]}>
-                      <PrimaryText size={11} color={colors.secondaryText}>
-                        {trade.reason}
-                      </PrimaryText>
-                    </View>
-                    <View style={[gs.row, gs.gap8, gs.mt8]}>
-                      <View style={gs.flex1}>
-                        <PrimaryButton
-                          colors={colors}
-                          buttonTitle="Edit trade"
-                          icon="pencil"
-                          size="sm"
-                          variant="ghost"
-                          onPress={() => setTradeEditor(trade)}
-                        />
+                  {open ? (
+                    <View style={[gs.px14, gs.pb20]}>
+                      <View style={{height: 1, backgroundColor: colors.secondaryAccent}} />
+                      <View style={[gs.p12, gs.rounded12, gs.mt10, {backgroundColor: colors.secondaryAccent}]}>
+                        <PrimaryText size={11} color={colors.secondaryText}>
+                          {trade.reason}
+                        </PrimaryText>
                       </View>
-                      <View style={gs.flex1}>
-                        <PrimaryButton
-                          colors={colors}
-                          buttonTitle="Delete"
-                          icon="trash-2"
-                          size="sm"
-                          variant="ghost"
-                          onPress={() => removeTrade(trade)}
-                        />
+                      <View style={[gs.row, gs.gap8, gs.mt8]}>
+                        <View style={gs.flex1}>
+                          <PrimaryButton
+                            colors={colors}
+                            buttonTitle="Edit trade"
+                            icon="pencil"
+                            size="sm"
+                            variant="ghost"
+                            onPress={() => setTradeEditor(trade)}
+                          />
+                        </View>
+                        <View style={gs.flex1}>
+                          <PrimaryButton
+                            colors={colors}
+                            buttonTitle="Delete"
+                            icon="trash-2"
+                            size="sm"
+                            variant="ghost"
+                            onPress={() => removeTrade(trade)}
+                          />
+                        </View>
                       </View>
                     </View>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })
+                  ) : null}
+                </View>
+              );
+            })}
+          </Animated.View>
         )}
 
         {trades.length > 0 ? (

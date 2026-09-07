@@ -6,6 +6,8 @@ import {navigate} from '../../utils/navigationUtils';
 import Icon from '../../components/atoms/Icons';
 import DebtorList from '../../components/molecules/DebtorList';
 import useDebts from './useDebts';
+import SchedulesSection from '../../recurring/SchedulesSection';
+import {useRecurringSchedules} from '../../recurring/useRecurringSchedules';
 import PrimaryView from '../../components/atoms/PrimaryView';
 import PrimaryText from '../../components/atoms/PrimaryText';
 import EmptyState from '../../components/atoms/EmptyState';
@@ -13,18 +15,15 @@ import useFormatAmount from '../../hooks/useFormatAmount';
 import {gs, hitSlop} from '../../styles/globalStyles';
 
 const DebtsScreen = () => {
-  const {
-    colors,
-    allDebts,
-    debtorType,
-    setDebtorType,
-    personDebtors,
-    otherAccountsDebtors,
-    totalDebts,
-    debtors,
-  } = useDebts();
+  const {colors, allDebts, debtorType, setDebtorType, personDebtors, otherAccountsDebtors, totalDebts, debtors} =
+    useDebts();
   const {t} = useTranslation();
   const formatAmount = useFormatAmount();
+  const {
+    schedules: debtSchedules,
+    nameOf: debtScheduleName,
+    reload: reloadDebtSchedules,
+  } = useRecurringSchedules('debt');
 
   const overallLabel = useMemo(() => {
     if (totalDebts > 0) return t('debts.youOweOthers');
@@ -38,74 +37,82 @@ const DebtsScreen = () => {
     return colors.primaryText;
   }, [totalDebts, colors]);
 
-  const ListHeader = useMemo(() => (
-    <View style={gs.mx16}>
-      <View
-        style={[
-          gs.py12,
-          gs.px14,
-          gs.rounded12,
-          gs.mb15,
-          gs.center,
-          {backgroundColor: colors.containerColor},
-        ]}>
-        <PrimaryText size={11} weight="medium" color={colors.secondaryText} style={gs.mb5}>
-          {overallLabel}
-        </PrimaryText>
-        <PrimaryText size={28} weight="bold" variant="number" color={amountColor}>
-          {formatAmount(Math.abs(totalDebts))}
-        </PrimaryText>
-        <View style={[gs.rowCenter, gs.gap6, gs.mt6]}>
-          <PrimaryText size={11} color={colors.secondaryText} variant="number">
-            {t('debts.personCount', {count: personDebtors.length})}
+  const ListHeader = useMemo(
+    () => (
+      <View style={gs.mx16}>
+        <View style={[gs.py12, gs.px14, gs.rounded12, gs.mb15, gs.center, {backgroundColor: colors.containerColor}]}>
+          <PrimaryText size={11} weight="medium" color={colors.secondaryText} style={gs.mb5}>
+            {overallLabel}
           </PrimaryText>
-          <PrimaryText size={11} color={colors.secondaryText}>·</PrimaryText>
-          <PrimaryText size={11} color={colors.secondaryText} variant="number">
-            {t('debts.accountCount', {count: otherAccountsDebtors.length})}
+          <PrimaryText size={28} weight="bold" variant="number" color={amountColor}>
+            {formatAmount(Math.abs(totalDebts))}
           </PrimaryText>
+          <View style={[gs.rowCenter, gs.gap6, gs.mt6]}>
+            <PrimaryText size={11} color={colors.secondaryText} variant="number">
+              {t('debts.personCount', {count: personDebtors.length})}
+            </PrimaryText>
+            <PrimaryText size={11} color={colors.secondaryText}>
+              ·
+            </PrimaryText>
+            <PrimaryText size={11} color={colors.secondaryText} variant="number">
+              {t('debts.accountCount', {count: otherAccountsDebtors.length})}
+            </PrimaryText>
+          </View>
+        </View>
+
+        <View style={[gs.row, gs.gap8, gs.mb15]}>
+          <TouchableOpacity
+            onPress={() => setDebtorType('Person')}
+            activeOpacity={0.7}
+            style={[
+              gs.py8,
+              gs.px14,
+              gs.rounded12,
+              {
+                backgroundColor: debtorType === 'Person' ? colors.primaryText : colors.secondaryAccent,
+              },
+            ]}>
+            <PrimaryText
+              size={13}
+              weight="semibold"
+              color={debtorType === 'Person' ? colors.buttonText : colors.secondaryText}>
+              {t('debts.tabPerson')}
+            </PrimaryText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setDebtorType('Other')}
+            activeOpacity={0.7}
+            style={[
+              gs.py8,
+              gs.px14,
+              gs.rounded12,
+              {
+                backgroundColor: debtorType === 'Other' ? colors.primaryText : colors.secondaryAccent,
+              },
+            ]}>
+            <PrimaryText
+              size={13}
+              weight="semibold"
+              color={debtorType === 'Other' ? colors.buttonText : colors.secondaryText}>
+              {t('debts.tabAccounts')}
+            </PrimaryText>
+          </TouchableOpacity>
         </View>
       </View>
-
-      <View style={[gs.row, gs.gap8, gs.mb15]}>
-        <TouchableOpacity
-          onPress={() => setDebtorType('Person')}
-          activeOpacity={0.7}
-          style={[
-            gs.py8,
-            gs.px14,
-            gs.rounded12,
-            {
-              backgroundColor: debtorType === 'Person' ? colors.primaryText : colors.secondaryAccent,
-            },
-          ]}>
-          <PrimaryText
-            size={13}
-            weight="semibold"
-            color={debtorType === 'Person' ? colors.buttonText : colors.secondaryText}>
-            {t('debts.tabPerson')}
-          </PrimaryText>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setDebtorType('Other')}
-          activeOpacity={0.7}
-          style={[
-            gs.py8,
-            gs.px14,
-            gs.rounded12,
-            {
-              backgroundColor: debtorType === 'Other' ? colors.primaryText : colors.secondaryAccent,
-            },
-          ]}>
-          <PrimaryText
-            size={13}
-            weight="semibold"
-            color={debtorType === 'Other' ? colors.buttonText : colors.secondaryText}>
-            {t('debts.tabAccounts')}
-          </PrimaryText>
-        </TouchableOpacity>
-      </View>
-    </View>
-  ), [amountColor, colors, formatAmount, debtorType, overallLabel, otherAccountsDebtors.length, personDebtors.length, setDebtorType, t, totalDebts]);
+    ),
+    [
+      amountColor,
+      colors,
+      formatAmount,
+      debtorType,
+      overallLabel,
+      otherAccountsDebtors.length,
+      personDebtors.length,
+      setDebtorType,
+      t,
+      totalDebts,
+    ],
+  );
 
   return (
     <PrimaryView colors={colors} useBottomPadding={false} useSidePadding={false}>
@@ -122,6 +129,21 @@ const DebtsScreen = () => {
           debtors={debtorType === 'Person' ? personDebtors : otherAccountsDebtors}
           allDebts={allDebts}
           ListHeaderComponent={ListHeader}
+          ListFooterComponent={
+            <View style={gs.mx16}>
+              <SchedulesSection
+                title="Scheduled debts"
+                subtitle="Auto-added on their day each month. Pause or delete anytime."
+                schedules={debtSchedules}
+                describe={schedule =>
+                  schedule.target === 'debt'
+                    ? `${schedule.debtType} → ${debtScheduleName(schedule)}`
+                    : debtScheduleName(schedule)
+                }
+                onChanged={() => void reloadDebtSchedules()}
+              />
+            </View>
+          }
         />
       )}
       <View style={[gs.absolute, gs.bottom15, gs.right15, gs.zIndex1]}>

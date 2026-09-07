@@ -20,6 +20,8 @@ import {gs} from '../../styles/globalStyles';
 import AmountInput from '../atoms/AmountInput';
 import {useDialog} from '../../context/DialogContext';
 import {requireCloudUser} from '../../cloud/records';
+import RecurringToggle from '../../recurring/RecurringToggle';
+import {saveRecurringSchedule} from '../../recurring/service';
 
 interface DebtEntryProps {
   buttonText: string;
@@ -75,6 +77,8 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
   const [createdAt, setCreatedAt] = useState(isAddButton ? getISODateTime() : debtDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [debtsType, setDebtsType] = useState(isAddButton ? 'Borrow' : debtType);
+  const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const [repeatDay, setRepeatDay] = useState(() => String(Number(createdAt.slice(8, 10)) || 1));
   const userId = useAppSelector(selectUserId);
 
   const debtAmountError = hasInteracted ? expenseAmountSchema?.safeParse(Number(debtAmount)).error?.issues || [] : [];
@@ -92,6 +96,30 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
     try {
       requireCloudUser(capturedUserId);
       await createDebt(capturedUserId, Number(debtAmount), debtName, debtorId, createdAt, debtsType);
+      if (repeatMonthly) {
+        try {
+          await saveRecurringSchedule(
+            {
+              target: 'debt',
+              dayOfMonth: Number(repeatDay),
+              amount: Number(debtAmount),
+              startMonth: createdAt.slice(0, 7),
+              debtorId,
+              debtType: debtsType as 'Borrow' | 'Lend',
+              description: debtName,
+            },
+            undefined,
+            {lastPostedMonth: createdAt.slice(0, 7)},
+          );
+        } catch (scheduleError) {
+          await showAlert({
+            type: 'warning',
+            message: `Debt saved, but the monthly automation was not set: ${
+              scheduleError instanceof Error ? scheduleError.message : 'Please try again.'
+            }`,
+          });
+        }
+      }
       requireCloudUser(capturedUserId);
       if (!mountedRef.current) {
         return;
@@ -113,7 +141,20 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
         setIsSaving(false);
       }
     }
-  }, [isValid, userId, debtAmount, debtName, debtorId, createdAt, debtsType, dispatch, showSaveFailure]);
+  }, [
+    isValid,
+    userId,
+    debtAmount,
+    debtName,
+    debtorId,
+    createdAt,
+    debtsType,
+    repeatMonthly,
+    repeatDay,
+    dispatch,
+    showSaveFailure,
+    showAlert,
+  ]);
 
   const handleUpdateDebt = useCallback(async () => {
     if (savingRef.current || !mountedRef.current || !isValid) {
@@ -228,6 +269,16 @@ const DebtEntry: React.FC<DebtEntryProps> = ({buttonText, route}) => {
           setCreatedAt={setCreatedAt}
           label={t('transaction.dateLabel')}
         />
+
+        {isAddButton ? (
+          <RecurringToggle
+            enabled={repeatMonthly}
+            onToggle={setRepeatMonthly}
+            day={repeatDay}
+            onDay={setRepeatDay}
+            what="debt entry"
+          />
+        ) : null}
       </View>
 
       <View style={gs.mb10p}>

@@ -21,6 +21,9 @@
  *   v8          — Trading journal: trades with pair, direction, leverage, average
  *                 price, strategy, reason, risk/reward, and PnL, plus custom
  *                 strategy/pair registries and monthly opening balances.
+ *   v9          — Monthly automations: recurring expense, investment
+ *                 contribution, and debt schedules with pause state and resume
+ *                 cursors. References travel as names and are remapped on restore.
  *
  * RULES:
  *   - Bump when the ExportData shape or data semantics change.
@@ -32,6 +35,6 @@
  *   Example: zero_v3_20260321163018.json
  *   The version in the filename matches the version inside the JSON.
  */
-export const CURRENT_EXPORT_VERSION = 8;
+export const CURRENT_EXPORT_VERSION = 9;
 
 export type {ExportData, ExportEnvelope} from './validate';

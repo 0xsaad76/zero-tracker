@@ -28,6 +28,59 @@ function useEditor<T extends {id: string; name: string}>(visible: boolean) {
   return {name, setName, editing, setEditing, saving, setSaving};
 }
 
+function SetupRow({
+  name,
+  count,
+  noun,
+  onEdit,
+  onDelete,
+  editLabel,
+  deleteLabel,
+}: {
+  name: string;
+  count: number;
+  noun: string;
+  onEdit: () => void;
+  onDelete: () => void;
+  editLabel: string;
+  deleteLabel: string;
+}) {
+  const rowColors = useThemeColors();
+  return (
+    <View style={[gs.rowBetweenCenter, gs.p14, gs.rounded12, gs.mb8, {backgroundColor: rowColors.containerColor}]}>
+      <View style={[gs.rowCenter, gs.gap10, gs.flex1]}>
+        <View style={[gs.size40, gs.center, gs.rounded12, {backgroundColor: rowColors.secondaryAccent}]}>
+          <Icon name={noun === 'pair' ? 'tag' : 'notebook-pen'} size={18} color={rowColors.accentGreen} />
+        </View>
+        <View style={gs.flex1}>
+          <PrimaryText size={13} weight="semibold" numberOfLines={1}>
+            {name}
+          </PrimaryText>
+          <PrimaryText size={10} color={rowColors.secondaryText} style={gs.mt3}>
+            {count} {count === 1 ? 'trade' : 'trades'}
+          </PrimaryText>
+        </View>
+      </View>
+      <TouchableOpacity
+        onPress={onEdit}
+        hitSlop={hitSlop}
+        style={gs.p8}
+        accessibilityRole="button"
+        accessibilityLabel={editLabel}>
+        <Icon name="pencil" size={17} color={rowColors.secondaryText} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onDelete}
+        hitSlop={hitSlop}
+        style={gs.p8}
+        accessibilityRole="button"
+        accessibilityLabel={deleteLabel}>
+        <Icon name="trash-2" size={17} color={rowColors.accentRed} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function TradingSetupManager({
   visible,
   strategies,
@@ -148,48 +201,6 @@ export default function TradingSetupManager({
     );
   };
 
-  const renderRow = (
-    name: string,
-    count: number,
-    noun: string,
-    onEdit: () => void,
-    onDelete: () => void,
-    editLabel: string,
-    deleteLabel: string,
-  ) => (
-    <View style={[gs.rowBetweenCenter, gs.p14, gs.rounded12, gs.mb8, {backgroundColor: colors.containerColor}]}>
-      <View style={[gs.rowCenter, gs.gap10, gs.flex1]}>
-        <View style={[gs.size40, gs.center, gs.rounded12, {backgroundColor: colors.secondaryAccent}]}>
-          <Icon name={noun === 'pair' ? 'tag' : 'notebook-pen'} size={18} color={colors.accentGreen} />
-        </View>
-        <View style={gs.flex1}>
-          <PrimaryText size={13} weight="semibold" numberOfLines={1}>
-            {name}
-          </PrimaryText>
-          <PrimaryText size={10} color={colors.secondaryText} style={gs.mt3}>
-            {count} {count === 1 ? 'trade' : 'trades'}
-          </PrimaryText>
-        </View>
-      </View>
-      <TouchableOpacity
-        onPress={onEdit}
-        hitSlop={hitSlop}
-        style={gs.p8}
-        accessibilityRole="button"
-        accessibilityLabel={editLabel}>
-        <Icon name="pencil" size={17} color={colors.secondaryText} />
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={onDelete}
-        hitSlop={hitSlop}
-        style={gs.p8}
-        accessibilityRole="button"
-        accessibilityLabel={deleteLabel}>
-        <Icon name="trash-2" size={17} color={colors.accentRed} />
-      </TouchableOpacity>
-    </View>
-  );
-
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <PrimaryView colors={colors} useBottomPadding={false}>
@@ -250,20 +261,21 @@ export default function TradingSetupManager({
           <PrimaryText size={13} weight="semibold" style={[gs.mt20, gs.mb8]}>
             Available strategies
           </PrimaryText>
-          {strategies.map(strategy =>
-            renderRow(
-              strategy.name,
-              trades.filter(trade => trade.strategy === strategy.id).length,
-              'strategy',
-              () => {
+          {strategies.map(strategy => (
+            <SetupRow
+              key={strategy.id}
+              name={strategy.name}
+              count={trades.filter(trade => trade.strategy === strategy.id).length}
+              noun="strategy"
+              onEdit={() => {
                 strategyEditor.setEditing(strategy);
                 strategyEditor.setName(strategy.name);
-              },
-              () => removeStrategy(strategy),
-              `Edit ${strategy.name}`,
-              `Delete ${strategy.name}`,
-            ),
-          )}
+              }}
+              onDelete={() => removeStrategy(strategy)}
+              editLabel={`Edit ${strategy.name}`}
+              deleteLabel={`Delete ${strategy.name}`}
+            />
+          ))}
 
           <View style={[gs.p14, gs.rounded16, gs.mt20, {backgroundColor: colors.containerColor}]}>
             <PrimaryText size={13} weight="semibold" style={gs.mb10}>
@@ -309,20 +321,21 @@ export default function TradingSetupManager({
           <PrimaryText size={13} weight="semibold" style={[gs.mt20, gs.mb8]}>
             Available pairs
           </PrimaryText>
-          {pairs.map(pair =>
-            renderRow(
-              pair.name,
-              trades.filter(trade => trade.pair === pair.id).length,
-              'pair',
-              () => {
+          {pairs.map(pair => (
+            <SetupRow
+              key={pair.id}
+              name={pair.name}
+              count={trades.filter(trade => trade.pair === pair.id).length}
+              noun="pair"
+              onEdit={() => {
                 pairEditor.setEditing(pair);
                 pairEditor.setName(pair.name);
-              },
-              () => removePair(pair),
-              `Edit ${pair.name}`,
-              `Delete ${pair.name}`,
-            ),
-          )}
+              }}
+              onDelete={() => removePair(pair)}
+              editLabel={`Edit ${pair.name}`}
+              deleteLabel={`Delete ${pair.name}`}
+            />
+          ))}
         </ScrollView>
       </PrimaryView>
     </Modal>

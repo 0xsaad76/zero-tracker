@@ -206,6 +206,34 @@ try {
   // A v3 client can still write a compatible record without deleting trading rows.
   assert.equal(await write(6, [record(A, 'v3-client', 'Coffee')]), true);
   assert.equal((await db.query('select public.zero_read_v4() as snapshot')).rows[0].snapshot.records.length, 11);
+  // Automations stay invisible to older clients and validate strictly.
+  const schedule = {
+    kind: 'recurring_schedules',
+    id: 'sip',
+    data: {
+      id: 'sip',
+      userId: A,
+      target: 'expense',
+      dayOfMonth: 5,
+      amount: 200,
+      paused: false,
+      startMonth: '2026-09',
+      lastPostedMonth: null,
+      categoryId: 'food',
+      title: 'Cash withdrawal',
+      description: '',
+    },
+  };
+  assert.equal(await write(7, [schedule]), true);
+  assert.equal((await db.query('select public.zero_read_v5() as snapshot')).rows[0].snapshot.records.length, 12);
+  assert.equal((await db.query('select public.zero_read_v4() as snapshot')).rows[0].snapshot.records.length, 11);
+  assert.equal((await db.query('select public.zero_read_v2() as snapshot')).rows[0].snapshot.records.length, 4);
+  assert.equal((await read()).records.length, 3);
+  await assert.rejects(write(8, [{...schedule, data: {...schedule.data, dayOfMonth: 32}}]));
+  await assert.rejects(write(8, [{...schedule, data: {...schedule.data, debtType: 'X', target: 'debt'}}]));
+  // A v4 client can still write a compatible record without deleting automations.
+  assert.equal(await write(8, [record(A, 'v4-client', 'Tea')]), true);
+  assert.equal((await db.query('select public.zero_read_v5() as snapshot')).rows[0].snapshot.records.length, 13);
   // Reset only the ephemeral test fixtures before the existing gate.
   await db.exec('reset role; delete from public.zero_records; delete from public.zero_accounts;');
   await user(A);
@@ -251,7 +279,7 @@ try {
   await assert.rejects(write(0, []));
   await assert.rejects(db.query('select * from public.zero_records'));
   console.log(
-    'PASS: trading compatibility, investment compatibility, owner isolation, anonymous denial, CAS conflicts, atomic rollback, account deletion scope, >1,000-row restore.',
+    'PASS: automation compatibility, trading compatibility, investment compatibility, owner isolation, anonymous denial, CAS conflicts, atomic rollback, account deletion scope, >1,000-row restore.',
   );
 } finally {
   await db.close();

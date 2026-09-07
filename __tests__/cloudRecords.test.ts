@@ -29,6 +29,13 @@ import {
   saveTradingPair,
   saveTradingStrategy,
 } from '../src/trading/service';
+import {
+  deleteRecurringSchedule,
+  runRecurringSchedules,
+  saveRecurringSchedule,
+  setRecurringSchedulePaused,
+  updateRecurringSchedule,
+} from '../src/recurring/service';
 
 jest.mock('../src/cloud/client', () => ({supabase: {auth: {getSession: jest.fn()}, rpc: jest.fn()}}));
 let remote: {revision: number; records: CloudRecord[]};
@@ -59,7 +66,9 @@ beforeEach(async () => {
         call.token = value;
         return {
           abortSignal: async () => {
-            if (name === 'zero_read_v4' || name === 'zero_read_v3') return {data: clone(remote), error: null};
+            if (name === 'zero_read_v5' || name === 'zero_read_v4' || name === 'zero_read_v3') {
+              return {data: clone(remote), error: null};
+            }
             if (failWrite) return {data: null, error: {message: 'offline'}};
             if (conflict) {
               conflict = false;
@@ -338,27 +347,39 @@ it('stores monthly opening balances', async () => {
   ]);
 });
 
-const missingFunctionOnce = () =>
+const missingFunctionOnce = (version: number) =>
   rpc.mockImplementationOnce((() => ({
     setHeader: () => ({
       abortSignal: async () => ({
         data: null,
-        error: {message: 'Could not find the function public.zero_read_v4 in the schema cache', code: 'PGRST202'},
+        error: {
+          message: `Could not find the function public.zero_read_v${version} in the schema cache`,
+          code: 'PGRST202',
+        },
       }),
     }),
   })) as never);
 
 it('falls back to older reads when the server lacks the newest function', async () => {
-  missingFunctionOnce();
+  missingFunctionOnce(5);
   const data = await readCloudData();
-  expect(cloudProtocolVersion()).toBe(3);
+  expect(cloudProtocolVersion()).toBe(4);
   expect(data.trades).toEqual([]);
+  expect(data.recurringSchedules).toEqual([]);
   const id = await createExpense('account-a', 'Lunch', 50, '', 'food', '2026-09-04');
   expect(decodeRecords(remote.records).expenses.map(expense => expense.id)).toContain(id);
 });
 
+it('keeps falling back until a known read function answers', async () => {
+  missingFunctionOnce(5);
+  missingFunctionOnce(4);
+  await readCloudData();
+  expect(cloudProtocolVersion()).toBe(3);
+});
+
 it('blocks trading writes with a clear error while the cloud lacks v4', async () => {
-  missingFunctionOnce();
+  missingFunctionOnce(5);
+  missingFunctionOnce(4);
   await readCloudData();
   await expect(
     saveTrade({
@@ -371,6 +392,47 @@ it('blocks trading writes with a clear error while the cloud lacks v4', async ()
       strategy: 'sfp',
       reason: 'Sweep with displacement.',
       pnl: 250,
+    }),
+  ).rejects.toThrow('cloud update');
+});
+
+it('saves, pauses, runs, and deletes automations atomically', async () => {
+  const id = await saveRecurringSchedule({
+    target: 'expense',
+    dayOfMonth: 5,
+    amount: 200,
+    startMonth: '2020-01',
+    categoryId: 'food',
+    title: 'Cash withdrawal',
+    description: '',
+  });
+  await setRecurringSchedulePaused(id, true);
+  expect(await runRecurringSchedules('2020-03-10')).toEqual({posted: [], skipped: []});
+  await setRecurringSchedulePaused(id, false);
+  const first = await runRecurringSchedules('2020-03-10');
+  expect(first.posted.map(entry => entry.date)).toEqual(['2020-01-05', '2020-02-05', '2020-03-05']);
+  expect(decodeRecords(remote.records).expenses).toHaveLength(3);
+  const second = await runRecurringSchedules('2020-03-10');
+  expect(second).toEqual({posted: [], skipped: []});
+  await updateRecurringSchedule(id, {amount: 250});
+  expect(decodeRecords(remote.records).recurringSchedules?.[0].amount).toBe(250);
+  await deleteRecurringSchedule(id);
+  expect(decodeRecords(remote.records).recurringSchedules).toEqual([]);
+});
+
+it('blocks automation writes with a clear error while the cloud lacks v5', async () => {
+  missingFunctionOnce(5);
+  missingFunctionOnce(4);
+  await readCloudData();
+  await expect(
+    saveRecurringSchedule({
+      target: 'expense',
+      dayOfMonth: 5,
+      amount: 200,
+      startMonth: '2020-01',
+      categoryId: 'food',
+      title: 'Cash withdrawal',
+      description: '',
     }),
   ).rejects.toThrow('cloud update');
 });

@@ -208,6 +208,9 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System",
+    "darkClassic": "Classic",
+    "darkMidnight": "Midnight",
+    "darkGhost": "Ghost",
     "name": "Name",
     "currency": "Currency",
     "spendingLimits": "Spending limits",
@@ -256,6 +259,7 @@
   },
   "sheets": {
     "selectTheme": "Select Theme",
+    "selectDarkStyle": "Dark style",
     "selectMonthYear": "Select Month & Year",
     "changeName": "Change Name",
     "nameplaceholder": "Enter your name",

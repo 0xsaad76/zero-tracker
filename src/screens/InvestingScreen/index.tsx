@@ -32,6 +32,8 @@ import {
 import {InvestmentEditor, InvestmentEntryEditor} from './InvestmentEditor';
 import InvestmentReports from './InvestmentReports';
 import InvestmentTypeManager from './InvestmentTypeManager';
+import SchedulesSection from '../../recurring/SchedulesSection';
+import {useRecurringSchedules} from '../../recurring/useRecurringSchedules';
 
 type EntryEditor = {
   investment: Investment;
@@ -89,6 +91,11 @@ const InvestingScreen = () => {
   const [typeManagerOpen, setTypeManagerOpen] = useState(false);
   const [entryEditor, setEntryEditor] = useState<EntryEditor | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const {
+    schedules: sipSchedules,
+    nameOf: sipScheduleName,
+    reload: reloadSipSchedules,
+  } = useRecurringSchedules('investment');
 
   const load = useCallback(async (pull = false) => {
     pull ? setRefreshing(true) : setLoading(true);
@@ -578,6 +585,19 @@ const InvestingScreen = () => {
         )}
 
         {investments.length > 0 ? <InvestmentReports investments={investments} selectedMonth={month} /> : null}
+
+        <SchedulesSection
+          title="Scheduled SIPs"
+          subtitle="Auto-added on their day each month. Pause or delete anytime."
+          schedules={sipSchedules}
+          describe={schedule =>
+            schedule.target === 'investment' ? `SIP → ${sipScheduleName(schedule)}` : sipScheduleName(schedule)
+          }
+          onChanged={() => {
+            void reloadSipSchedules();
+            void load();
+          }}
+        />
       </ScrollView>
 
       <InvestmentEditor

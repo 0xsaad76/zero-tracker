@@ -1,5 +1,5 @@
 import React, {createContext, useCallback, useContext, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, AppState, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {Alert, ActivityIndicator, AppState, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {GoogleSignin, isSuccessResponse} from '@react-native-google-signin/google-signin';
 import type {Session} from '@supabase/supabase-js';
 import {supabase} from '../cloud/client';
@@ -10,9 +10,13 @@ import {hydrateUserData} from '../redux/slice/userIdSlice';
 import {setIsOnboarded} from '../redux/slice/isOnboardedSlice';
 import {useAppDispatch} from '../redux/hooks';
 import {restoreBackupPreferences} from '../utils/backupPreferences';
-import {clearYearsCache} from '../utils/availableYearsCache';
+import {clearYearsCache, ensureYearInCache} from '../utils/availableYearsCache';
 import {clearErrorLog} from '../utils/errorLog';
 import {useThemeColors} from './ThemeContext';
+import DialogContext from './DialogContext';
+import useFormatAmount from '../hooks/useFormatAmount';
+import {invalidateExpenseCache} from '../redux/slice/expenseDataSlice';
+import {runRecurringSchedules} from '../recurring/service';
 import {clearInvestmentReminders} from '../investments/reminders';
 import StorageService from '../utils/asyncStorageService';
 
@@ -33,6 +37,10 @@ export function useCloudAuth() {
 export function CloudAuthProvider({children}: {children: React.ReactNode}) {
   const dispatch = useAppDispatch();
   const colors = useThemeColors();
+  // DialogProvider wraps this provider in the app, but test harnesses may
+  // not. The automation summary falls back to a plain alert when absent.
+  const dialog = useContext(DialogContext);
+  const formatAmount = useFormatAmount();
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<'loading' | 'login' | 'migration' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
@@ -189,6 +197,36 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       restoreBackupPreferences(
         data.preferences ?? {theme: 'system', locale: null, weekStart: 'monday', showBudgetProgress: true},
       );
+      // Monthly automations post before the app opens: every due SIP,
+      // withdrawal, and debt lands backdated in one transaction. Skipped
+      // entirely when the account holds no schedules, so login costs nothing
+      // extra. A failure here must never block login — the next launch retries.
+      let automationBullets: {icon: string; text: string}[] = [];
+      if ((data.recurringSchedules ?? []).length > 0) {
+        try {
+          const summary = await runRecurringSchedules();
+          if (!alive) return;
+          requireCloudUser(userId);
+          if (summary.posted.length > 0 || summary.skipped.length > 0) {
+            dispatch(invalidateExpenseCache());
+            for (const year of new Set(summary.posted.map(entry => Number(entry.date.slice(0, 4))))) {
+              ensureYearInCache(userId, year);
+            }
+            automationBullets = [
+              ...summary.posted.map(entry => ({
+                icon: 'refresh-cw',
+                text: `${entry.label} · ${entry.date} · ${entry.amount > 0 ? '+' : ''}${formatAmount(entry.amount)}`,
+              })),
+              ...summary.skipped.map(skipped => ({
+                icon: 'alert-triangle',
+                text: `Skipped ${skipped.label}: ${skipped.reason}`,
+              })),
+            ];
+          }
+        } catch (caught) {
+          if (__DEV__) console.warn('Automation run failed, will retry next launch.', caught);
+        }
+      }
       dispatch(
         hydrateUserData({
           userId,
@@ -199,6 +237,19 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       dispatch(setIsOnboarded(data.currencies.length > 0));
       setError('');
       setStatus('ready');
+      if (automationBullets.length > 0) {
+        if (dialog) {
+          void dialog
+            .showAlert({
+              type: 'success',
+              message: 'Your scheduled entries are posted and up to date.',
+              bullets: automationBullets,
+            })
+            .catch(() => {});
+        } else {
+          Alert.alert('Scheduled entries posted', automationBullets.map(bullet => `• ${bullet.text}`).join('\n'));
+        }
+      }
     })().catch(e => {
       if (alive) {
         setError(e instanceof Error ? e.message : 'Could not load your account.');

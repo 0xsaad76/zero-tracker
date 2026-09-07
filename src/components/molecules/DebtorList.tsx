@@ -21,9 +21,16 @@ interface DebtorListProps {
   debtors: Array<Debtor>;
   allDebts: Array<Debt>;
   ListHeaderComponent?: React.ComponentType<any> | React.ReactElement | null;
+  ListFooterComponent?: React.ComponentType<any> | React.ReactElement | null;
 }
 
-const DebtorList: React.FC<DebtorListProps> = ({colors, debtors, allDebts, ListHeaderComponent}) => {
+const DebtorList: React.FC<DebtorListProps> = ({
+  colors,
+  debtors,
+  allDebts,
+  ListHeaderComponent,
+  ListFooterComponent,
+}) => {
   const {t} = useTranslation();
   const formatAmount = useFormatAmount();
   const handleDebtor = useCallback((debtorId: string, debtorName: string, debtorType: string) => {
@@ -123,6 +130,7 @@ const DebtorList: React.FC<DebtorListProps> = ({colors, debtors, allDebts, ListH
         renderItem={renderDebtorItem}
         keyExtractor={item => String(item.id)}
         ListHeaderComponent={ListHeaderComponent}
+        ListFooterComponent={ListFooterComponent}
         ListEmptyComponent={ListEmpty}
         contentContainerStyle={gs.pb100}
       />
