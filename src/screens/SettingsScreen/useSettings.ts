@@ -170,7 +170,7 @@ const useSettings = () => {
 
       const confirmed = await showDialog({
         type: 'warning',
-        message: `Permanently delete all expenses, categories, debtors, debts, spending limits, and currency records from the cloud for ${email || 'your signed-in Google account'}? This cannot be undone. Your Google account and sign-in will be retained.`,
+        message: `Permanently delete all expenses, income, categories, debts, spending limits, investments, trades, automations, and currency records from the cloud for ${email || 'your signed-in Google account'}? This cannot be undone. Your Google account and sign-in will be retained.`,
         okLabel: 'Delete',
       });
       if (!confirmed) return;

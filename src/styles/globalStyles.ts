@@ -232,7 +232,16 @@ export const gs = StyleSheet.create({
   size35: {width: 35, height: 35},
   size40: {width: 40, height: 40},
   size50: {width: 50, height: 50},
+  size56: {width: 56, height: 56},
   size60: {width: 60, height: 60},
+  // Floating action buttons: one consistent lift across every screen.
+  fabShadow: {
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: {width: 0, height: 3},
+  },
   size100: {width: 100, height: 100},
 
   // GAP

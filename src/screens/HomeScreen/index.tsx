@@ -13,7 +13,12 @@ import PrimaryText from '../../components/atoms/PrimaryText';
 import EmptyState from '../../components/atoms/EmptyState';
 import useFormatAmount from '../../hooks/useFormatAmount';
 import {SheetManager} from 'react-native-actions-sheet';
-import {gs, hitSlop} from '../../styles/globalStyles';
+import {gs} from '../../styles/globalStyles';
+import Fab from '../../components/atoms/Fab';
+import OverviewTiles from './OverviewTiles';
+import {useOverview} from './useOverview';
+import {useFeatureFlags} from '../../features/flags';
+import {monthBalance} from '../../income/model';
 import BudgetProgressCard from '../../components/molecules/BudgetProgressCard';
 import SchedulesSection from '../../recurring/SchedulesSection';
 import {useRecurringSchedules} from '../../recurring/useRecurringSchedules';
@@ -48,6 +53,13 @@ const HomeScreen = () => {
   } = useHome();
   const {t} = useTranslation();
   const formatAmount = useFormatAmount();
+  const features = useFeatureFlags();
+  // Row count changes on add/delete and `refreshing` flips on pull-to-refresh: both mean "numbers may be stale".
+  const overview = useOverview(yearMonth, `${transactionCount}:${refreshing}`);
+  const balance = useMemo(
+    () => (overview.income === null ? null : monthBalance(overview.income, totalSpent)),
+    [overview.income, totalSpent],
+  );
   const {shouldShowTutorial, tutorialRef, dismissTutorial} = useSwipeTutorial({
     screen: 'home',
     itemCount: sortedTransactions.length,
@@ -72,40 +84,98 @@ const HomeScreen = () => {
   const listHeader = useMemo(
     () => (
       <View style={gs.mx16}>
-        <TouchableOpacity
-          onPress={openMonthPicker}
-          activeOpacity={0.7}
-          style={[gs.px14, gs.py12, gs.rounded12, {backgroundColor: colors.accentGreen}]}>
-          <View style={gs.rowBetweenCenter}>
+        <View style={[gs.rounded16, gs.overflowHidden, {backgroundColor: colors.accentGreen}]}>
+          <TouchableOpacity
+            onPress={openMonthPicker}
+            activeOpacity={0.7}
+            style={[gs.px14, gs.pt15, gs.pb10]}
+            accessibilityRole="button"
+            accessibilityLabel={`${selectedMonthName} ${selectedYear}, spent ${formatAmount(totalSpent)}. Change month`}>
             <View style={[gs.rowCenter, gs.gap6]}>
-              <PrimaryText size={14} weight="semibold" color={colors.buttonText}>
+              <PrimaryText size={13} weight="semibold" color={colors.buttonText}>
                 {selectedMonthName} {selectedYear}
               </PrimaryText>
               <Icon name="chevron-down" size={14} color={colors.buttonText} />
             </View>
-            <PrimaryText size={20} weight="bold" variant="number" color={colors.buttonText}>
+            <PrimaryText size={10} color={colors.buttonText} style={[gs.mt10, {opacity: 0.75}]}>
+              SPENT
+            </PrimaryText>
+            <PrimaryText size={28} weight="bold" variant="number" color={colors.buttonText} numberOfLines={1}>
               {formatAmount(totalSpent)}
             </PrimaryText>
-          </View>
-          <View style={[gs.rowCenter, gs.gap8, gs.mt4]}>
-            <PrimaryText size={11} color={colors.buttonText} variant="number" style={{opacity: 0.7}}>
-              {t('home.transactionCount', {count: transactionCount})}
-            </PrimaryText>
-            {todayTotal > 0 ? (
-              <>
-                <PrimaryText size={11} color={colors.buttonText} style={{opacity: 0.7}}>
-                  ·
-                </PrimaryText>
-                <PrimaryText size={11} color={colors.buttonText} variant="number" style={{opacity: 0.7}}>
-                  {t('home.today')}: {formatAmount(todayTotal)}
-                </PrimaryText>
-              </>
-            ) : null}
-          </View>
-        </TouchableOpacity>
+            <View style={[gs.rowCenter, gs.gap8, gs.mt4]}>
+              <PrimaryText size={11} color={colors.buttonText} variant="number" style={{opacity: 0.7}}>
+                {t('home.transactionCount', {count: transactionCount})}
+              </PrimaryText>
+              {todayTotal > 0 ? (
+                <>
+                  <PrimaryText size={11} color={colors.buttonText} style={{opacity: 0.7}}>
+                    ·
+                  </PrimaryText>
+                  <PrimaryText size={11} color={colors.buttonText} variant="number" style={{opacity: 0.7}}>
+                    {t('home.today')}: {formatAmount(todayTotal)}
+                  </PrimaryText>
+                </>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+          {balance ? (
+            <TouchableOpacity
+              onPress={() => navigate('IncomeScreen')}
+              activeOpacity={0.7}
+              style={[gs.rowCenter, gs.px14, gs.py10, {backgroundColor: 'rgba(0,0,0,0.12)'}]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                balance.income > 0
+                  ? `Income ${formatAmount(balance.income)}, ${balance.left < 0 ? 'overspent' : 'left'} ${formatAmount(Math.abs(balance.left))}. Open income`
+                  : 'Add income for this month'
+              }>
+              {balance.income > 0 ? (
+                <>
+                  <View style={gs.flex1}>
+                    <PrimaryText size={10} color={colors.buttonText} style={{opacity: 0.75}}>
+                      INCOME
+                    </PrimaryText>
+                    <PrimaryText
+                      size={14}
+                      weight="semibold"
+                      variant="number"
+                      color={colors.buttonText}
+                      numberOfLines={1}>
+                      {formatAmount(balance.income)}
+                    </PrimaryText>
+                  </View>
+                  <View style={gs.flex1}>
+                    <PrimaryText size={10} color={colors.buttonText} style={{opacity: 0.75}}>
+                      {balance.left < 0 ? 'OVERSPENT' : 'LEFT'}
+                    </PrimaryText>
+                    <PrimaryText
+                      size={14}
+                      weight="semibold"
+                      variant="number"
+                      color={colors.buttonText}
+                      numberOfLines={1}>
+                      {formatAmount(Math.abs(balance.left))}
+                    </PrimaryText>
+                  </View>
+                </>
+              ) : (
+                <View style={[gs.rowCenter, gs.gap6, gs.flex1]}>
+                  <Icon name="wallet" size={14} color={colors.buttonText} />
+                  <PrimaryText size={12} weight="medium" color={colors.buttonText}>
+                    Add this month's income to see what is left
+                  </PrimaryText>
+                </View>
+              )}
+              <Icon name="chevron-right" size={16} color={colors.buttonText} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <OverviewTiles overview={overview} />
 
         <BudgetProgressCard
-          visible={showBudgetProgress}
+          visible={showBudgetProgress && features.limits}
           monthlyExpenses={sortedTransactions}
           weeklyExpenses={weeklyTransactions}
           weekRange={weekRange}
@@ -148,6 +218,9 @@ const HomeScreen = () => {
       weeklyError,
       monthlyError,
       showBudgetProgress,
+      features.limits,
+      balance,
+      overview,
       sortedTransactions,
       daysInMonth,
       spendingSchedules,
@@ -173,7 +246,7 @@ const HomeScreen = () => {
     <>
       <PrimaryView colors={colors} useBottomPadding={false} useSidePadding={false}>
         <View style={[gs.px16, gs.mb15]}>
-          <HeaderContainer headerText={t('home.greeting', {name: userName})} />
+          <HeaderContainer headerText={t('home.greeting', {name: userName})} showSearch />
         </View>
         {shouldShowTutorial && <SwipeTutorialTooltip onDismiss={dismissTutorial} />}
         <TransactionList
@@ -188,16 +261,7 @@ const HomeScreen = () => {
           tutorialSwipeRef={tutorialRef}
         />
       </PrimaryView>
-      <View style={[gs.absolute, gs.bottom15, gs.right15, gs.zIndex1]}>
-        <TouchableOpacity
-          style={[gs.size50, gs.rounded8, gs.center, {backgroundColor: colors.secondaryBackground}]}
-          onPress={() => navigate('AddTransactionsScreen')}
-          hitSlop={hitSlop}
-          accessibilityLabel={t('home.addTransaction')}
-          accessibilityRole="button">
-          <Icon name="plus-circle" size={30} color={colors.primaryText} />
-        </TouchableOpacity>
-      </View>
+      <Fab onPress={() => navigate('AddTransactionsScreen')} accessibilityLabel={t('home.addTransaction')} />
     </>
   );
 };

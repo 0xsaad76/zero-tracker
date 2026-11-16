@@ -1,7 +1,7 @@
 import {nanoid} from 'nanoid';
 import {z} from 'zod';
 import {mutateCloudData, recurringSyncAvailable, requireCloudUser, type CloudData} from '../cloud/records';
-import {investmentBackupSchema} from '../investments/model';
+import {investmentBackupSchema, localDate} from '../investments/model';
 import {
   dueMonths,
   recurringScheduleSchema,
@@ -106,7 +106,9 @@ function assertRefs(draft: CloudData, item: z.infer<typeof recurringScheduleSche
  */
 export async function runRecurringSchedules(today?: string): Promise<RunSummary> {
   const owner = requireCloudUser();
-  const now = today ?? new Date().toISOString().slice(0, 10);
+  // Local calendar day, matching dueMonths: a UTC date is still "yesterday"
+  // for the first hours of the day east of Greenwich and would post late.
+  const now = today ?? localDate();
   return mutateCloudData(draft => {
     requireCloudUser(owner);
     const posted: PostedEntry[] = [];

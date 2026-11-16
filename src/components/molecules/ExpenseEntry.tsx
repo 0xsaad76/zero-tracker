@@ -35,6 +35,7 @@ import {useDialog} from '../../context/DialogContext';
 import {requireCloudUser} from '../../cloud/records';
 import RecurringToggle from '../../recurring/RecurringToggle';
 import {saveRecurringSchedule} from '../../recurring/service';
+import {useFeatureFlags} from '../../features/flags';
 
 interface ExpenseEntryProps {
   type: string;
@@ -108,7 +109,10 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
 
   const colors = useThemeColors();
   const formatAmount = useFormatAmount();
-  const currentBudget = useAppSelector(selectCurrentBudget);
+  const features = useFeatureFlags();
+  const savedBudget = useAppSelector(selectCurrentBudget);
+  // Spending limits switched off: no daily-allowance hint under the amount.
+  const currentBudget = features.limits ? savedBudget : null;
 
   const expenseYearMonth = formatDate(createdAt, 'YYYY-MM');
   const expenseDateStr = formatDate(createdAt, 'YYYY-MM-DD');
@@ -237,7 +241,7 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
         categoryId,
         createdAt,
       );
-      if (repeatMonthly) {
+      if (repeatMonthly && features.automations) {
         try {
           await saveRecurringSchedule(
             {
@@ -297,6 +301,7 @@ const ExpenseEntry: React.FC<ExpenseEntryProps> = ({type, route}) => {
     createdAt,
     repeatMonthly,
     repeatDay,
+    features.automations,
     dispatch,
     showSaveFailure,
     showAlert,

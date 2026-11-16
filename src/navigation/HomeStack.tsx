@@ -27,6 +27,10 @@ import UpdateDebtorScreen from '../screens/UpdateDebtorScreen';
 import InvestingScreen from '../screens/InvestingScreen';
 import TradingScreen from '../screens/TradingScreen';
 import SpendingLimitsScreen from '../screens/SpendingLimitsScreen';
+import SearchScreen from '../screens/SearchScreen';
+import IncomeScreen from '../screens/IncomeScreen';
+import IncomeEntryScreen from '../screens/IncomeScreen/IncomeEntryScreen';
+import {useFeatureFlags} from '../features/flags';
 import {gs} from '../styles/globalStyles';
 
 const screenOptions = {
@@ -53,10 +57,6 @@ const DebtIcon = ({color}: {color: string}) => {
   return <TabIcon color={color} icon="credit-card" />;
 };
 
-const CategoriesIcon = ({color}: {color: string}) => {
-  return <TabIcon color={color} icon="shapes" />;
-};
-
 const InvestingIcon = ({color}: {color: string}) => {
   return <TabIcon color={color} icon="piggy-bank" />;
 };
@@ -78,6 +78,7 @@ const TabStack = () => {
   const {t} = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
+  const features = useFeatureFlags();
 
   const bottomPadding = Math.max(insets.bottom, 8);
 
@@ -97,7 +98,7 @@ const TabStack = () => {
         tabBarInactiveTintColor: colors.primaryText,
         tabBarShowLabel: true,
         tabBarLabelPosition: 'below-icon',
-        tabBarLabelStyle: [gs.text9, gs.fontMedium, gs.noFontPadding],
+        tabBarLabelStyle: [gs.text11, gs.fontMedium, gs.noFontPadding],
         tabBarStyle: tabBarStyle,
         tabBarItemStyle: {minWidth: 0},
         tabBarButton: TabBarButton,
@@ -112,26 +113,28 @@ const TabStack = () => {
         component={ReportsScreen}
         options={{tabBarLabel: t('tabs.reports'), tabBarIcon: ReportsIcon}}
       />
-      <Tab.Screen
-        name="CategoryScreen"
-        component={CategoryScreen}
-        options={{tabBarLabel: t('tabs.categories'), tabBarIcon: CategoriesIcon}}
-      />
-      <Tab.Screen
-        name="DebtsScreen"
-        component={DebtsScreen}
-        options={{tabBarLabel: t('tabs.debts'), tabBarIcon: DebtIcon}}
-      />
-      <Tab.Screen
-        name="InvestingScreen"
-        component={InvestingScreen}
-        options={{tabBarLabel: t('tabs.investing'), tabBarIcon: InvestingIcon}}
-      />
-      <Tab.Screen
-        name="TradingScreen"
-        component={TradingScreen}
-        options={{tabBarLabel: t('tabs.trading'), tabBarIcon: TradingIcon}}
-      />
+      {/* Optional tabs exist only while their feature is switched on in Settings. */}
+      {features.debts ? (
+        <Tab.Screen
+          name="DebtsScreen"
+          component={DebtsScreen}
+          options={{tabBarLabel: t('tabs.debts'), tabBarIcon: DebtIcon}}
+        />
+      ) : null}
+      {features.investing ? (
+        <Tab.Screen
+          name="InvestingScreen"
+          component={InvestingScreen}
+          options={{tabBarLabel: t('tabs.investing'), tabBarIcon: InvestingIcon}}
+        />
+      ) : null}
+      {features.trading ? (
+        <Tab.Screen
+          name="TradingScreen"
+          component={TradingScreen}
+          options={{tabBarLabel: t('tabs.trading'), tabBarIcon: TradingIcon}}
+        />
+      ) : null}
     </Tab.Navigator>
   );
 };
@@ -141,6 +144,10 @@ const HomeStack = () => {
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="TabStack" component={TabStack} />
       <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
+      <Stack.Screen name="CategoryScreen" component={CategoryScreen} />
+      <Stack.Screen name="SearchScreen" component={SearchScreen} />
+      <Stack.Screen name="IncomeScreen" component={IncomeScreen} />
+      <Stack.Screen name="IncomeEntryScreen" component={IncomeEntryScreen} />
       <Stack.Screen name="SpendingLimitsScreen" component={SpendingLimitsScreen} />
       <Stack.Screen name="AddTransactionsScreen" component={AddTransactionsScreen} />
       <Stack.Screen name="UpdateTransactionScreen" component={UpdateTransactionScreen} />

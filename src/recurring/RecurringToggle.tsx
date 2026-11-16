@@ -4,6 +4,7 @@ import PrimaryText from '../components/atoms/PrimaryText';
 import CustomInput from '../components/atoms/CustomInput';
 import useThemeColors from '../hooks/useThemeColors';
 import {gs} from '../styles/globalStyles';
+import {useFeatureFlags} from '../features/flags';
 
 /**
  * "Repeat monthly" switch with a day-of-month input, shared by the expense,
@@ -24,6 +25,9 @@ export default function RecurringToggle({
   what: string;
 }) {
   const colors = useThemeColors();
+  const {automations} = useFeatureFlags();
+  // Switched off in Settings: the forms simply lose the option.
+  if (!automations) return null;
   return (
     <View style={[gs.p14, gs.rounded12, gs.mb15, {backgroundColor: colors.containerColor}]}>
       <View style={gs.rowBetweenCenter}>

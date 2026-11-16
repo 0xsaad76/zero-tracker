@@ -3,6 +3,7 @@ import {setLocaleOverride} from './locale';
 import {getWeekStartDay, setWeekStartDay} from './weekStart';
 import {getShowBudgetProgress, setShowBudgetProgress} from './budgetProgressPreference';
 import {getTradingCurrency, setTradingCurrency} from './tradingCurrency';
+import {FEATURE_FLAGS_KEY, getFeatureFlags, setFeatureFlags} from '../features/flags';
 import type {ExportData} from '../backend/export/format';
 
 // Explicit allowlist: never export Redux caches, OAuth credentials, account links, or diagnostics.
@@ -12,6 +13,7 @@ export const BACKUP_PREFERENCE_KEYS = [
   'weekStartDay',
   'showBudgetProgress',
   'tradingCurrency',
+  FEATURE_FLAGS_KEY,
 ];
 
 export const getBackupPreferences = (): NonNullable<ExportData['preferences']> => {
@@ -22,6 +24,7 @@ export const getBackupPreferences = (): NonNullable<ExportData['preferences']> =
     weekStart: getWeekStartDay(),
     showBudgetProgress: getShowBudgetProgress(),
     tradingCurrency: getTradingCurrency(),
+    features: getFeatureFlags(),
   };
 };
 
@@ -34,4 +37,7 @@ export const restoreBackupPreferences = (preferences: ExportData['preferences'])
   setWeekStartDay(preferences.weekStart);
   setShowBudgetProgress(preferences.showBudgetProgress);
   if (preferences.tradingCurrency) setTradingCurrency(preferences.tradingCurrency);
+  // Preferences saved before feature switches existed mean "everything on".
+  // Normalising here also stops one account's switches leaking into the next.
+  setFeatureFlags(preferences.features ?? {});
 };

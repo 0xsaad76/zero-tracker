@@ -234,6 +234,44 @@ try {
   // A v4 client can still write a compatible record without deleting automations.
   assert.equal(await write(8, [record(A, 'v4-client', 'Tea')]), true);
   assert.equal((await db.query('select public.zero_read_v5() as snapshot')).rows[0].snapshot.records.length, 13);
+  // Income stays invisible to older clients and validates strictly.
+  const income = {
+    kind: 'incomes',
+    id: 'salary',
+    data: {id: 'salary', userId: A, title: 'Salary', amount: 50000, date: '2026-11-01', description: ''},
+  };
+  assert.equal(await write(9, [income]), true);
+  assert.equal((await db.query('select public.zero_read_v6() as snapshot')).rows[0].snapshot.records.length, 14);
+  assert.equal((await db.query('select public.zero_read_v5() as snapshot')).rows[0].snapshot.records.length, 13);
+  assert.equal((await db.query('select public.zero_read_v4() as snapshot')).rows[0].snapshot.records.length, 12);
+  assert.equal((await db.query('select public.zero_read_v2() as snapshot')).rows[0].snapshot.records.length, 5);
+  assert.equal((await read()).records.length, 4);
+  await assert.rejects(write(10, [{...income, data: {...income.data, amount: 0}}]));
+  await assert.rejects(write(10, [{...income, data: {...income.data, date: '2026-02-31'}}]));
+  await assert.rejects(write(10, [{...income, data: {...income.data, title: '  '}}]));
+  await assert.rejects(write(10, [{...income, data: {...income.data, amount: 10.001}}]));
+  // A v5 client can still write a compatible record without deleting income.
+  assert.equal(await write(10, [record(A, 'v5-client', 'Snack')]), true);
+  assert.equal((await db.query('select public.zero_read_v6() as snapshot')).rows[0].snapshot.records.length, 15);
+  // Feature switches live inside the unconstrained settings record.
+  assert.equal(
+    await write(11, [
+      {
+        kind: 'settings',
+        id: 'preferences',
+        data: {
+          preferences: {
+            theme: 'system',
+            locale: null,
+            weekStart: 'monday',
+            showBudgetProgress: true,
+            features: {trading: false},
+          },
+        },
+      },
+    ]),
+    true,
+  );
   // Reset only the ephemeral test fixtures before the existing gate.
   await db.exec('reset role; delete from public.zero_records; delete from public.zero_accounts;');
   await user(A);
@@ -279,7 +317,7 @@ try {
   await assert.rejects(write(0, []));
   await assert.rejects(db.query('select * from public.zero_records'));
   console.log(
-    'PASS: automation compatibility, trading compatibility, investment compatibility, owner isolation, anonymous denial, CAS conflicts, atomic rollback, account deletion scope, >1,000-row restore.',
+    'PASS: income compatibility, automation compatibility, trading compatibility, investment compatibility, owner isolation, anonymous denial, CAS conflicts, atomic rollback, account deletion scope, >1,000-row restore.',
   );
 } finally {
   await db.close();

@@ -3,7 +3,7 @@ import React, {useMemo} from 'react';
 import {useTranslation} from 'react-i18next';
 import HeaderContainer from '../../components/molecules/HeaderContainer';
 import {navigate} from '../../utils/navigationUtils';
-import Icon from '../../components/atoms/Icons';
+import Fab from '../../components/atoms/Fab';
 import DebtorList from '../../components/molecules/DebtorList';
 import useDebts from './useDebts';
 import SchedulesSection from '../../recurring/SchedulesSection';
@@ -12,7 +12,7 @@ import PrimaryView from '../../components/atoms/PrimaryView';
 import PrimaryText from '../../components/atoms/PrimaryText';
 import EmptyState from '../../components/atoms/EmptyState';
 import useFormatAmount from '../../hooks/useFormatAmount';
-import {gs, hitSlop} from '../../styles/globalStyles';
+import {gs} from '../../styles/globalStyles';
 
 const DebtsScreen = () => {
   const {colors, allDebts, debtorType, setDebtorType, personDebtors, otherAccountsDebtors, totalDebts, debtors} =
@@ -146,16 +146,7 @@ const DebtsScreen = () => {
           }
         />
       )}
-      <View style={[gs.absolute, gs.bottom15, gs.right15, gs.zIndex1]}>
-        <TouchableOpacity
-          style={[gs.size50, gs.rounded8, gs.center, {backgroundColor: colors.secondaryBackground}]}
-          onPress={() => navigate('AddDebtorScreen')}
-          hitSlop={hitSlop}
-          accessibilityLabel={t('debts.addDebtor')}
-          accessibilityRole="button">
-          <Icon name="plus-circle" size={30} color={colors.primaryText} />
-        </TouchableOpacity>
-      </View>
+      <Fab onPress={() => navigate('AddDebtorScreen')} accessibilityLabel={t('debts.addDebtor')} />
     </PrimaryView>
   );
 };

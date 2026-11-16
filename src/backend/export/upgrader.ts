@@ -65,6 +65,12 @@ export const upgradeExportData = (raw: RawExport): ExportData => {
     version = 9;
   }
 
+  if (version < 10) {
+    // Absent income leaves existing income untouched on import, and absent
+    // feature switches mean every optional feature stays on.
+    version = 10;
+  }
+
   if (__DEV__ && version < CURRENT_EXPORT_VERSION) {
     console.warn(`Export format v${version} is behind current v${CURRENT_EXPORT_VERSION}`);
   }

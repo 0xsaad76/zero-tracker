@@ -1,11 +1,12 @@
 import {RefreshControl, View} from 'react-native';
-import {TouchableOpacity} from 'react-native-gesture-handler';
 import React, {useCallback, useRef, memo} from 'react';
 import {useTranslation} from 'react-i18next';
 import type {SwipeableMethods} from 'react-native-gesture-handler/ReanimatedSwipeable';
-import {navigate} from '../../utils/navigationUtils';
+import {goBack, navigate} from '../../utils/navigationUtils';
 import Icon from '../../components/atoms/Icons';
-import HeaderContainer from '../../components/molecules/HeaderContainer';
+import AppHeader from '../../components/atoms/AppHeader';
+import Fab from '../../components/atoms/Fab';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import useCategory from './useCategory';
 import useSwipeTutorial from '../../hooks/useSwipeTutorial';
 import SwipeTutorialTooltip from '../../components/atoms/SwipeTutorialTooltip';
@@ -16,7 +17,7 @@ import {CategoryData as Category} from '../../cloud';
 import EmptyState from '../../components/atoms/EmptyState';
 import {Colors} from '../../hooks/useThemeColors';
 import {FlashList} from '@shopify/flash-list';
-import {gs, hitSlop} from '../../styles/globalStyles';
+import {gs} from '../../styles/globalStyles';
 import {hexToRgba} from '../../utils/colorUtils';
 
 const CategoryRow = memo(({
@@ -79,6 +80,7 @@ const CategoryRow = memo(({
 const CategoryScreen = () => {
   const {colors, refreshing, onRefresh, categories, handleEdit, handleDelete} = useCategory();
   const {t} = useTranslation();
+  const insets = useSafeAreaInsets();
   const openSwipeableRef = useRef<{close: () => void} | null>(null);
   const {shouldShowTutorial, tutorialRef, dismissTutorial} = useSwipeTutorial({screen: 'category', itemCount: categories.length});
 
@@ -104,8 +106,13 @@ const CategoryScreen = () => {
   return (
     <>
       <PrimaryView colors={colors} useSidePadding={false} useBottomPadding={false}>
-        <View style={[gs.mb15, gs.px16]}>
-          <HeaderContainer headerText={t('categories.title')} />
+        <View style={[gs.mb15, gs.mt20, gs.px16]}>
+          <AppHeader
+            onPress={() => goBack()}
+            colors={colors}
+            text={t('categories.title')}
+            subtitle={t('categories.subtitle')}
+          />
         </View>
         {shouldShowTutorial && <SwipeTutorialTooltip onDismiss={dismissTutorial} />}
         <View style={gs.flex1}>
@@ -120,16 +127,11 @@ const CategoryScreen = () => {
           />
         </View>
       </PrimaryView>
-      <View style={[gs.absolute, gs.bottom15, gs.right15, gs.zIndex1]}>
-        <TouchableOpacity
-          style={[gs.size50, gs.roundedFull, gs.center, {backgroundColor: colors.primaryText}]}
-          onPress={() => navigate('AddCategoryScreen')}
-          hitSlop={hitSlop}
-          accessibilityLabel={t('categories.addCategory')}
-          accessibilityRole="button">
-          <Icon name="plus" size={24} color={colors.buttonText} />
-        </TouchableOpacity>
-      </View>
+      <Fab
+        onPress={() => navigate('AddCategoryScreen')}
+        accessibilityLabel={t('categories.addCategory')}
+        bottom={Math.max(insets.bottom, 15) + 5}
+      />
     </>
   );
 };

@@ -29,6 +29,7 @@ import {
   saveTradingPair,
   saveTradingStrategy,
 } from '../src/trading/service';
+import {deleteIncome, saveIncome} from '../src/income/service';
 import {
   deleteRecurringSchedule,
   runRecurringSchedules,
@@ -66,7 +67,7 @@ beforeEach(async () => {
         call.token = value;
         return {
           abortSignal: async () => {
-            if (name === 'zero_read_v5' || name === 'zero_read_v4' || name === 'zero_read_v3') {
+            if (/^zero_read_v[3-6]$/.test(name)) {
               return {data: clone(remote), error: null};
             }
             if (failWrite) return {data: null, error: {message: 'offline'}};
@@ -361,6 +362,7 @@ const missingFunctionOnce = (version: number) =>
   })) as never);
 
 it('falls back to older reads when the server lacks the newest function', async () => {
+  missingFunctionOnce(6);
   missingFunctionOnce(5);
   const data = await readCloudData();
   expect(cloudProtocolVersion()).toBe(4);
@@ -371,13 +373,44 @@ it('falls back to older reads when the server lacks the newest function', async 
 });
 
 it('keeps falling back until a known read function answers', async () => {
+  missingFunctionOnce(6);
   missingFunctionOnce(5);
   missingFunctionOnce(4);
   await readCloudData();
   expect(cloudProtocolVersion()).toBe(3);
 });
 
+it('saves, edits, and deletes income on the newest protocol', async () => {
+  const id = await saveIncome({title: 'Salary', amount: 50000, date: '2026-11-01', description: ''});
+  expect(cloudProtocolVersion()).toBe(6);
+  expect(decodeRecords(remote.records).incomes).toEqual([
+    {id, userId: 'account-a', title: 'Salary', amount: 50000, date: '2026-11-01', description: ''},
+  ]);
+  await saveIncome({title: 'Salary', amount: 52000, date: '2026-11-01', description: 'Raise'}, id);
+  expect(decodeRecords(remote.records).incomes?.[0]).toMatchObject({amount: 52000, description: 'Raise'});
+  await expect(saveIncome({title: ' ', amount: 1, date: '2026-11-01', description: ''})).rejects.toThrow();
+  await expect(saveIncome({title: 'Bad day', amount: 1, date: '2026-02-31', description: ''})).rejects.toThrow();
+  await expect(
+    saveIncome({title: 'Gone', amount: 1, date: '2026-11-01', description: ''}, 'missing-id'),
+  ).rejects.toThrow('removed');
+  await deleteIncome(id);
+  expect(decodeRecords(remote.records).incomes).toEqual([]);
+});
+
+it('blocks income writes with a clear error while the cloud lacks v6', async () => {
+  missingFunctionOnce(6);
+  await readCloudData();
+  expect(cloudProtocolVersion()).toBe(5);
+  await expect(saveIncome({title: 'Salary', amount: 100, date: '2026-11-01', description: ''})).rejects.toThrow(
+    'cloud update',
+  );
+  // Everything older keeps working on the fallback protocol.
+  const expenseId = await createExpense('account-a', 'Lunch', 50, '', 'food', '2026-09-04');
+  expect(decodeRecords(remote.records).expenses.map(expense => expense.id)).toContain(expenseId);
+});
+
 it('blocks trading writes with a clear error while the cloud lacks v4', async () => {
+  missingFunctionOnce(6);
   missingFunctionOnce(5);
   missingFunctionOnce(4);
   await readCloudData();

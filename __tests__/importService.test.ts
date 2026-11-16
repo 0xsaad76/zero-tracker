@@ -22,6 +22,7 @@ import {upsertBudget, getBudgetsByMonth} from '../src/watermelondb/services/budg
 import {getAllData} from '../src/watermelondb/services/getService';
 import {getAllExpensesByDateRange} from '../src/watermelondb/services/expenseService';
 import {getBackupPreferences} from '../src/utils/backupPreferences';
+import {DEFAULT_FEATURE_FLAGS} from '../src/features/flags';
 
 jest.mock('../src/watermelondb/database', () => {
   const {Database: Db} = require('@nozbe/watermelondb');
@@ -113,8 +114,10 @@ describe('importAllData', () => {
     await importAllData(backup({preferences}));
     const exported = await getAllData();
     expect(exported?.budgets).toEqual(backup().budgets);
-    expect(exported?.preferences).toEqual(preferences);
-    expect(getBackupPreferences()).toEqual(preferences);
+    // Backups written before feature switches existed restore as "everything on".
+    const restored = {...preferences, features: DEFAULT_FEATURE_FLAGS};
+    expect(exported?.preferences).toEqual(restored);
+    expect(getBackupPreferences()).toEqual(restored);
     await importAllData(exported!);
     expect((await getAllData())?.budgets).toEqual(exported?.budgets);
   });
@@ -128,8 +131,22 @@ describe('importAllData', () => {
       tradingCurrency: 'INR',
     } as const;
     await importAllData(backup({preferences}));
-    expect(getBackupPreferences()).toEqual(preferences);
-    expect((await getAllData())?.preferences).toEqual(preferences);
+    const restored = {...preferences, features: DEFAULT_FEATURE_FLAGS};
+    expect(getBackupPreferences()).toEqual(restored);
+    expect((await getAllData())?.preferences).toEqual(restored);
+  });
+
+  it('round-trips feature switches and defaults missing ones to on', async () => {
+    const preferences = {
+      theme: 'dark',
+      locale: 'en',
+      weekStart: 'monday',
+      showBudgetProgress: true,
+      tradingCurrency: 'USD',
+      features: {trading: false, debts: false},
+    } as const;
+    await importAllData(backup({preferences}));
+    expect(getBackupPreferences().features).toEqual({...DEFAULT_FEATURE_FLAGS, trading: false, debts: false});
   });
 
   it('keeps overall, category, weekly and monthly limits independent', async () => {

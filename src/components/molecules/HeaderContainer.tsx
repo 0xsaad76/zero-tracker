@@ -1,55 +1,32 @@
-import {Alert, TouchableOpacity, View} from 'react-native';
-import React, {memo, useCallback} from 'react';
+import {TouchableOpacity, View} from 'react-native';
+import React, {memo} from 'react';
 import Icon from '../atoms/Icons';
 import MeshAvatar from '../atoms/MeshAvatar';
 import useThemeColors from '../../hooks/useThemeColors';
-import {useAppDispatch, useAppSelector} from '../../redux/hooks';
-import {selectUserName, setUserName} from '../../redux/slice/userNameSlice';
+import {useAppSelector} from '../../redux/hooks';
+import {selectUserName} from '../../redux/slice/userNameSlice';
 import {navigate} from '../../utils/navigationUtils';
 import PrimaryText from '../atoms/PrimaryText';
-import {updateUserById} from '../../cloud';
-import {selectUserId} from '../../redux/slice/userIdSlice';
-import {SheetManager} from 'react-native-actions-sheet';
 import {gs, hitSlop} from '../../styles/globalStyles';
-import {requireCloudUser} from '../../cloud/records';
 
 interface HeaderContainerProps {
   headerText: string;
+  /** Home shows a search shortcut next to Settings. */
+  showSearch?: boolean;
 }
 
-const HeaderContainer: React.FC<HeaderContainerProps> = ({headerText}) => {
+const HeaderContainer: React.FC<HeaderContainerProps> = ({headerText, showSearch = false}) => {
   const colors = useThemeColors();
-  const dispatch = useAppDispatch();
   const userName = useAppSelector(selectUserName);
-  const userId = useAppSelector(selectUserId);
-
-  const handleProfileClick = useCallback(() => {
-    void SheetManager.show('change-name-sheet', {
-      payload: {
-        currentName: userName,
-        onUpdate: (newName: string) => {
-          updateUserById(userId, {username: newName})
-            .then(() => {
-              requireCloudUser(userId);
-              dispatch(setUserName(newName));
-            })
-            .catch(() => {
-              try {
-                requireCloudUser(userId);
-              } catch {
-                return;
-              }
-              Alert.alert('Could not save name', 'Check your connection and try again.');
-            });
-        },
-      },
-    });
-  }, [userName, userId, dispatch]);
 
   return (
     <View style={[gs.rowCenter, gs.mt15, gs.justifyBetween]}>
       <View style={[gs.rowCenter, gs.flex1, gs.gap12]}>
-        <TouchableOpacity onPress={handleProfileClick}>
+        {/* The avatar and the cog both lead to Settings, where the name is edited. */}
+        <TouchableOpacity
+          onPress={() => navigate('SettingsScreen')}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings">
           <MeshAvatar
             name={userName ?? ''}
             size={40}
@@ -58,13 +35,28 @@ const HeaderContainer: React.FC<HeaderContainerProps> = ({headerText}) => {
             meshColor={colors.buttonText}
           />
         </TouchableOpacity>
-        <PrimaryText size={16} weight="semibold">
+        <PrimaryText size={16} weight="semibold" numberOfLines={1} style={gs.flex1}>
           {headerText}
         </PrimaryText>
       </View>
-      <TouchableOpacity onPress={() => navigate('SettingsScreen')} hitSlop={hitSlop}>
-        <Icon name="settings" size={22} color={colors.secondaryText} />
-      </TouchableOpacity>
+      <View style={[gs.rowCenter, gs.gap12, gs.ml10]}>
+        {showSearch ? (
+          <TouchableOpacity
+            onPress={() => navigate('SearchScreen')}
+            hitSlop={hitSlop}
+            accessibilityRole="button"
+            accessibilityLabel="Search spending">
+            <Icon name="search" size={22} color={colors.secondaryText} />
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          onPress={() => navigate('SettingsScreen')}
+          hitSlop={hitSlop}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings">
+          <Icon name="settings" size={22} color={colors.secondaryText} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };

@@ -15,7 +15,9 @@ live. The `custom_investment_types` and `trading_records` migrations have passed
 the ephemeral PGlite harness only; apply them to the live project and re-verify
 before signing in a device with trading data. The `recurring_schedules`
 migration is likewise harness-only; automation reads fall back to older
-protocols and automation writes fail closed until it is applied. No paid
+protocols and automation writes fail closed until it is applied. The
+`income_records` migration (read protocol v6) is also harness-only; income
+writes fail closed with a "cloud update" message until it is applied. No paid
 branch, service, or billing change was made.
 
 Google native Android sign-in also needs an Android OAuth client for package

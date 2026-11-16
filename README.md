@@ -9,6 +9,8 @@ This private-use Android fork of Zero uses Google sign-in and Supabase for finan
 - Home budget progress with optional thin category bars and a Settings visibility toggle.
 - Spending headers with weekday and date.
 - Investment portfolios with optional user-managed types, contribution/withdrawal history, monthly valuations, Android reminders, and reports. Trading journal with pairs, strategies, leverage, risk/reward, monthly balances, filters, and reports. Monthly automations that auto-post scheduled spending, SIP contributions, and debts with full catch-up.
+- Income entries with a monthly "what is left" balance, search across all spending, and a Home overview of debts, portfolio and trading.
+- Feature switches in Settings to hide income, spending limits, automations, debts, investing or trading. See [features](docs/FEATURES.md).
 - Automatic cloud writes after each successful save; no separate backup button.
 - Explicit JSON restore/export and CSV export.
 - Light, dark, and system themes; locale and currency preferences.
@@ -41,6 +43,7 @@ Cloud persistence is not a backup against intentional deletion: deleting cloud r
 ## Main code areas
 
 - `src/cloud/`: cloud transactions, domain services, JSON transfer, legacy migration.
+- `src/features/`: feature switches. `src/income/`: income validation and cloud mutations.
 - `src/investments/`: investment validation, return calculations, cloud mutations, and Android reminder bridge.
 - `src/context/CloudAuthContext.tsx`: login, session lifecycle, migration gate.
 - `supabase/migrations/`: deployed SQL schema and owner-only security rules.

@@ -136,6 +136,7 @@
   },
   "categories": {
     "title": "Categories",
+    "subtitle": "Swipe a category to edit or delete it.",
     "addCategory": "Add new category"
   },
   "futureFinance": {

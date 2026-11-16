@@ -19,6 +19,7 @@ import {invalidateExpenseCache} from '../redux/slice/expenseDataSlice';
 import {runRecurringSchedules} from '../recurring/service';
 import {clearInvestmentReminders} from '../investments/reminders';
 import StorageService from '../utils/asyncStorageService';
+import {getFeatureFlags} from '../features/flags';
 
 const EXPECTED_SESSION = 'cloudSessionExpected';
 
@@ -201,8 +202,10 @@ export function CloudAuthProvider({children}: {children: React.ReactNode}) {
       // withdrawal, and debt lands backdated in one transaction. Skipped
       // entirely when the account holds no schedules, so login costs nothing
       // extra. A failure here must never block login — the next launch retries.
+      // Switched off in Settings means nothing posts; the cursors are left
+      // alone, so switching back on catches up exactly like a long absence.
       let automationBullets: {icon: string; text: string}[] = [];
-      if ((data.recurringSchedules ?? []).length > 0) {
+      if (getFeatureFlags().automations && (data.recurringSchedules ?? []).length > 0) {
         try {
           const summary = await runRecurringSchedules();
           if (!alive) return;

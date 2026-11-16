@@ -9,6 +9,7 @@ import useFormatAmount from '../hooks/useFormatAmount';
 import {gs, hitSlop} from '../styles/globalStyles';
 import {scheduledDate, type RecurringSchedule} from './model';
 import {deleteRecurringSchedule, setRecurringSchedulePaused, updateRecurringSchedule} from './service';
+import {useFeatureFlags} from '../features/flags';
 
 function ScheduleRow({
   schedule,
@@ -173,18 +174,47 @@ export default function SchedulesSection({
   onChanged: () => void | Promise<void>;
 }) {
   const colors = useThemeColors();
-  if (schedules.length === 0) return null;
+  const {automations} = useFeatureFlags();
+  // Collapsed by default: automations are set-and-forget, so they should not
+  // push the day-to-day list down the screen until the user asks for them.
+  const [open, setOpen] = useState(false);
+  if (!automations || schedules.length === 0) return null;
+  const active = schedules.filter(schedule => !schedule.paused).length;
   return (
-    <View style={[gs.rounded16, gs.p14, gs.mt15, {backgroundColor: colors.containerColor}]}>
-      <PrimaryText size={16} weight="bold">
-        {title}
-      </PrimaryText>
-      <PrimaryText size={11} color={colors.secondaryText} style={[gs.mt3, gs.mb10]}>
-        {subtitle}
-      </PrimaryText>
-      {schedules.map(schedule => (
-        <ScheduleRow key={schedule.id} schedule={schedule} describe={describe} onChanged={onChanged} />
-      ))}
+    <View style={[gs.rounded16, gs.p14, gs.mt10, {backgroundColor: colors.containerColor}]}>
+      <TouchableOpacity
+        onPress={() => setOpen(value => !value)}
+        activeOpacity={0.7}
+        hitSlop={hitSlop}
+        style={gs.rowBetweenCenter}
+        accessibilityRole="button"
+        accessibilityState={{expanded: open}}
+        accessibilityLabel={`${title}, ${active} active of ${schedules.length}`}>
+        <View style={[gs.rowCenter, gs.gap8, gs.flex1]}>
+          <Icon name="repeat" size={16} color={colors.accentGreen} />
+          <PrimaryText size={14} weight="semibold" numberOfLines={1} style={gs.flexShrink}>
+            {title}
+          </PrimaryText>
+        </View>
+        <View style={[gs.rowCenter, gs.gap6]}>
+          <PrimaryText size={11} color={colors.secondaryText}>
+            {active === schedules.length
+              ? `${active} active`
+              : `${active} active · ${schedules.length - active} paused`}
+          </PrimaryText>
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={16} color={colors.secondaryText} />
+        </View>
+      </TouchableOpacity>
+      {open ? (
+        <>
+          <PrimaryText size={11} color={colors.secondaryText} style={[gs.mt8, gs.mb10]}>
+            {subtitle}
+          </PrimaryText>
+          {schedules.map(schedule => (
+            <ScheduleRow key={schedule.id} schedule={schedule} describe={describe} onChanged={onChanged} />
+          ))}
+        </>
+      ) : null}
     </View>
   );
 }

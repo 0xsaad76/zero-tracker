@@ -20,10 +20,13 @@ import {hexToRgba} from '../../utils/colorUtils';
 import {computeDailyAllowance} from '../../utils/budgetMath';
 import {leadingBlanks} from '../../utils/weekStart';
 
+import {useFeatureFlags} from '../../features/flags';
+
 /** Fallback slice color for expenses whose category record has no color. */
 const DEFAULT_SLICE_COLOR = '#758595';
 
 const ReportsScreen = () => {
+  const {limits: limitsEnabled} = useFeatureFlags();
   const {
     colors,
     selectedYear,
@@ -296,7 +299,8 @@ const ReportsScreen = () => {
         </View>
       </View>
 
-      {currentBudget ? (
+      {/* Spending limits switched off in Settings: no budget bar and no prompt to set one. */}
+      {!limitsEnabled ? null : currentBudget ? (
         <TouchableOpacity
           onPress={openBudgetSheet}
           activeOpacity={0.7}

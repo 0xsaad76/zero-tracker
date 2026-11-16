@@ -14,6 +14,7 @@ import {
   tradingStrategyRegistrySchema,
 } from '../trading/model';
 import {recurringScheduleExportSchema, type RecurringScheduleExport} from '../recurring/model';
+import {incomeBackupSchema} from '../income/model';
 
 export async function getAllData(): Promise<ExportData> {
   const d = await readCloudData();
@@ -52,6 +53,7 @@ export async function getAllData(): Promise<ExportData> {
     tradingStrategies: resolveTradingStrategies(d.tradingStrategyRegistry),
     tradingPairs: resolveTradingPairs(d.tradingPairRegistry),
     tradingBalances: (d.tradingBalanceRegistry?.items ?? []).map(item => ({...item})),
+    incomes: (d.incomes ?? []).map(({userId: _owner, ...income}) => income),
     recurringSchedules: (d.recurringSchedules ?? []).flatMap(
       ({userId: _owner, ...schedule}): RecurringScheduleExport[] => {
         if (schedule.target === 'expense') {
@@ -131,6 +133,10 @@ export async function importAllData(data: ExportData): Promise<ImportResult> {
     ...(data.investments ? {investments} : {}),
     ...(data.trades ? {trades: data.trades.map(t => ({...tradeBackupSchema.parse(t), id: nanoid(24), userId}))} : {}),
     ...(recurringSchedules.length ? {recurringSchedules} : {}),
+    // An absent income section (older backups) leaves existing income untouched.
+    ...(data.incomes
+      ? {incomes: data.incomes.map(income => ({...incomeBackupSchema.parse(income), id: nanoid(24), userId}))}
+      : {}),
     categories,
     debtors,
     currencies: plan.currencies.slice(0, 1).map(c => ({...c, id: userId, userId})),
@@ -221,6 +227,7 @@ export async function deleteAllData(): Promise<void> {
     draft.tradingPairRegistry = undefined;
     draft.tradingBalanceRegistry = undefined;
     draft.recurringSchedules = [];
+    draft.incomes = [];
     // Retain Google identity and migration receipts; deleting data is not deleting the account.
   });
 }

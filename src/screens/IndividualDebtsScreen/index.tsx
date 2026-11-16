@@ -6,6 +6,7 @@ import AppHeader from '../../components/atoms/AppHeader';
 import {goBack, navigate} from '../../utils/navigationUtils';
 import {useRoute} from '@react-navigation/native';
 import Icon from '../../components/atoms/Icons';
+import Fab from '../../components/atoms/Fab';
 import useIndividualDebts, {IndividualDebtsScreenRouteProp} from './useIndividualDebts';
 import useSwipeTutorial from '../../hooks/useSwipeTutorial';
 import SwipeTutorialTooltip from '../../components/atoms/SwipeTutorialTooltip';
@@ -184,16 +185,11 @@ const IndividualDebtsScreen = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         tutorialSwipeRef={tutorialRef}
       />
-      <View style={[gs.absolute, gs.right15, gs.zIndex1, {bottom: Math.max(insets.bottom, 15) + 5}]}>
-        <TouchableOpacity
-          style={[gs.size50, gs.rounded8, gs.center, {backgroundColor: colors.secondaryBackground}]}
-          onPress={() => navigate('AddDebtsScreen', {debtorId, debtorName})}
-          hitSlop={hitSlop}
-          accessibilityLabel={t('debts.addDebt')}
-          accessibilityRole="button">
-          <Icon name="plus" size={30} color={colors.primaryText} />
-        </TouchableOpacity>
-      </View>
+      <Fab
+        onPress={() => navigate('AddDebtsScreen', {debtorId, debtorName})}
+        accessibilityLabel={t('debts.addDebt')}
+        bottom={Math.max(insets.bottom, 15) + 5}
+      />
     </PrimaryView>
   );
 };

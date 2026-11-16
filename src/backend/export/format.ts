@@ -24,6 +24,8 @@
  *   v9          — Monthly automations: recurring expense, investment
  *                 contribution, and debt schedules with pause state and resume
  *                 cursors. References travel as names and are remapped on restore.
+ *   v10         — Income entries (source, amount, date, note) and optional
+ *                 feature switches inside display preferences.
  *
  * RULES:
  *   - Bump when the ExportData shape or data semantics change.
@@ -35,6 +37,6 @@
  *   Example: zero_v3_20260321163018.json
  *   The version in the filename matches the version inside the JSON.
  */
-export const CURRENT_EXPORT_VERSION = 9;
+export const CURRENT_EXPORT_VERSION = 10;
 
 export type {ExportData, ExportEnvelope} from './validate';

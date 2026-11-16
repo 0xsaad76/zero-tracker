@@ -20,6 +20,23 @@ import {Colors} from '../../hooks/useThemeColors';
 import {gs, hitSlop} from '../../styles/globalStyles';
 import {getShowBudgetProgress} from '../../utils/budgetProgressPreference';
 import {getAllData} from '../../cloud';
+import {FEATURE_KEYS, useFeatureFlags, type FeatureKey} from '../../features/flags';
+
+// Optional parts of the app. Switching one off hides it everywhere; its
+// records stay in the cloud and return when it is switched back on.
+const FEATURE_ROWS: Record<FeatureKey, {icon: string; label: string; subtitle: string}> = {
+  income: {icon: 'wallet', label: 'Income', subtitle: 'Record money coming in and see what is left each month.'},
+  limits: {icon: 'target', label: 'Spending limits', subtitle: 'Weekly and monthly limits with progress on Home.'},
+  automations: {
+    icon: 'repeat',
+    label: 'Monthly automations',
+    subtitle:
+      'Repeat spending, SIPs and debts each month. While off nothing posts; missed months post when switched back on.',
+  },
+  debts: {icon: 'credit-card', label: 'Debts', subtitle: 'Track what you owe and what others owe you.'},
+  investing: {icon: 'piggy-bank', label: 'Investing', subtitle: 'Portfolios, valuations and review reminders.'},
+  trading: {icon: 'trending-up', label: 'Trading journal', subtitle: 'Log closed trades and review performance.'},
+};
 
 interface SettingsRowProps {
   icon: string;
@@ -103,6 +120,23 @@ const SettingsScreen = () => {
     requestStorageViaDialog,
   } = useSettings();
   const [showBudgetProgress, setShowBudgetProgressState] = useState(getShowBudgetProgress);
+  const features = useFeatureFlags();
+  const [savingFeature, setSavingFeature] = useState<FeatureKey | null>(null);
+
+  // One switch saves at a time: each write carries the whole set, so two
+  // overlapping taps could otherwise overwrite one another.
+  const toggleFeature = useCallback(
+    async (key: FeatureKey) => {
+      if (savingFeature) return;
+      setSavingFeature(key);
+      try {
+        await handlePreferenceUpdate({features: {...features, [key]: !features[key]}});
+      } finally {
+        setSavingFeature(null);
+      }
+    },
+    [features, savingFeature, handlePreferenceUpdate],
+  );
 
   const toggleBudgetProgress = useCallback(async () => {
     const next = !showBudgetProgress;
@@ -255,6 +289,89 @@ const SettingsScreen = () => {
           weight="semibold"
           color={colors.accentGreen}
           style={[gs.mt20, gs.mb6, {letterSpacing: 0.8}]}>
+          FEATURES
+        </PrimaryText>
+        <View style={[gs.rounded12, gs.overflowHidden, {backgroundColor: colors.containerColor}]}>
+          {FEATURE_KEYS.map((key, index) => (
+            <React.Fragment key={key}>
+              {index > 0 ? <View style={[gs.mx16, {height: 1, backgroundColor: colors.secondaryAccent}]} /> : null}
+              <SettingsRow
+                colors={colors}
+                icon={FEATURE_ROWS[key].icon}
+                label={FEATURE_ROWS[key].label}
+                subtitle={FEATURE_ROWS[key].subtitle}
+                onPress={() => void toggleFeature(key)}
+                checked={features[key]}
+                valueNode={
+                  <View
+                    pointerEvents="none"
+                    importantForAccessibility="no-hide-descendants"
+                    style={savingFeature === key ? gs.opacity60 : undefined}>
+                    <Switch
+                      value={features[key]}
+                      trackColor={{false: colors.secondaryAccent, true: colors.accentGreen}}
+                    />
+                  </View>
+                }
+              />
+            </React.Fragment>
+          ))}
+        </View>
+        <PrimaryText size={11} color={colors.secondaryText} style={[gs.mt6, {paddingHorizontal: 4}]}>
+          Switching a feature off only hides it. Nothing is deleted, and it comes back when you switch it on again.
+        </PrimaryText>
+
+        <PrimaryText
+          size={11}
+          weight="semibold"
+          color={colors.accentGreen}
+          style={[gs.mt20, gs.mb6, {letterSpacing: 0.8}]}>
+          SPENDING
+        </PrimaryText>
+        <View style={[gs.rounded12, gs.overflowHidden, {backgroundColor: colors.containerColor}]}>
+          <SettingsRow
+            colors={colors}
+            icon="shapes"
+            label={t('categories.title')}
+            subtitle="Add, rename, recolour or remove spending categories."
+            onPress={() => navigate('CategoryScreen')}
+          />
+          {features.limits ? (
+            <>
+              <View style={[gs.mx16, {height: 1, backgroundColor: colors.secondaryAccent}]} />
+              <SettingsRow
+                colors={colors}
+                icon="target"
+                label={t('settings.spendingLimits')}
+                subtitle={t('settings.spendingLimitsSubtitle')}
+                onPress={() => navigate('SpendingLimitsScreen')}
+              />
+              <View style={[gs.mx16, {height: 1, backgroundColor: colors.secondaryAccent}]} />
+              <SettingsRow
+                colors={colors}
+                icon="bar-chart-3"
+                label={t('settings.showLimitProgress')}
+                subtitle={t('settings.showLimitProgressSubtitle')}
+                onPress={toggleBudgetProgress}
+                checked={showBudgetProgress}
+                valueNode={
+                  <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
+                    <Switch
+                      value={showBudgetProgress}
+                      trackColor={{false: colors.secondaryAccent, true: colors.accentGreen}}
+                    />
+                  </View>
+                }
+              />
+            </>
+          ) : null}
+        </View>
+
+        <PrimaryText
+          size={11}
+          weight="semibold"
+          color={colors.accentGreen}
+          style={[gs.mt20, gs.mb6, {letterSpacing: 0.8}]}>
           {t('settings.sectionPersonalization')}
         </PrimaryText>
         <View style={[gs.rounded12, gs.overflowHidden, {backgroundColor: colors.containerColor}]}>
@@ -302,31 +419,6 @@ const SettingsScreen = () => {
                 <PrimaryText size={10} color={colors.secondaryText}>
                   {currencyName}
                 </PrimaryText>
-              </View>
-            }
-          />
-          <View style={[gs.mx16, {height: 1, backgroundColor: colors.secondaryAccent}]} />
-          <SettingsRow
-            colors={colors}
-            icon="target"
-            label={t('settings.spendingLimits')}
-            subtitle={t('settings.spendingLimitsSubtitle')}
-            onPress={() => navigate('SpendingLimitsScreen')}
-          />
-          <View style={[gs.mx16, {height: 1, backgroundColor: colors.secondaryAccent}]} />
-          <SettingsRow
-            colors={colors}
-            icon="bar-chart-3"
-            label={t('settings.showLimitProgress')}
-            subtitle={t('settings.showLimitProgressSubtitle')}
-            onPress={toggleBudgetProgress}
-            checked={showBudgetProgress}
-            valueNode={
-              <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
-                <Switch
-                  value={showBudgetProgress}
-                  trackColor={{false: colors.secondaryAccent, true: colors.accentGreen}}
-                />
               </View>
             }
           />

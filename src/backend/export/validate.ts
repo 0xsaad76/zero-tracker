@@ -9,6 +9,7 @@ import {
   tradingStrategySchema,
 } from '../../trading/model';
 import {recurringScheduleExportSchema} from '../../recurring/model';
+import {incomeBackupSchema} from '../../income/model';
 
 const userSchema = z.object({
   username: z.string(),
@@ -120,6 +121,7 @@ const exportDataSchema = z
     tradingPairs: tradingPairListSchema.optional(),
     tradingBalances: tradingBalanceListSchema.optional(),
     recurringSchedules: z.array(recurringScheduleExportSchema).optional(),
+    incomes: z.array(incomeBackupSchema).max(100000).optional(),
     preferences: z
       .object({
         theme: z.enum(['system', 'light', 'dark']),
@@ -127,6 +129,17 @@ const exportDataSchema = z
         weekStart: z.enum(['sunday', 'monday']),
         showBudgetProgress: z.boolean(),
         tradingCurrency: z.enum(['USD', 'INR']).optional(),
+        // Optional feature switches. Missing keys mean "on"; see features/flags.ts.
+        features: z
+          .object({
+            income: z.boolean().optional(),
+            limits: z.boolean().optional(),
+            automations: z.boolean().optional(),
+            debts: z.boolean().optional(),
+            investing: z.boolean().optional(),
+            trading: z.boolean().optional(),
+          })
+          .optional(),
       })
       .optional(),
   })

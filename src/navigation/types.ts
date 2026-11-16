@@ -3,7 +3,6 @@ import type {NavigatorScreenParams} from '@react-navigation/native';
 export type TabParamList = {
   HomeScreen: undefined;
   ReportsScreen: undefined;
-  CategoryScreen: undefined;
   DebtsScreen: undefined;
   InvestingScreen: undefined;
   TradingScreen: undefined;
@@ -12,6 +11,10 @@ export type TabParamList = {
 export type HomeStackParamList = {
   TabStack: NavigatorScreenParams<TabParamList>;
   SettingsScreen: undefined;
+  CategoryScreen: undefined;
+  SearchScreen: undefined;
+  IncomeScreen: undefined;
+  IncomeEntryScreen: {income?: {id: string; title: string; amount: number; date: string; description: string}};
   SpendingLimitsScreen: undefined;
   DiagnosticsScreen: undefined;
   AddTransactionsScreen: undefined;
